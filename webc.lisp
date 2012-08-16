@@ -9,9 +9,21 @@
 
 (setf parenscript:*js-string-delimiter* #\")
 
-(start (make-instance 'acceptor :port 8080))
+#+nil
+(defparameter *acceptor*
+ (start (make-instance 'acceptor :port 8080
+		       :access-log-destination *standard-output*
+		       :message-log-destination *standard-output*)))
+#+nil
+*dispatch-table*
+#+nil
+hunchentoot::*easy-handler-alist*
 
-(define-easy-handler (tutorial1 :uri "/tutorial1") ()
+(hunchentoot:define-easy-handler (say-yo :uri "/yo") (name)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (format nil "Hey~@[ ~A~]!" name))
+
+(define-easy-handler (tutorial1 :uri "/tutorial1" :acceptor-names t) ()
   (with-html-output-to-string (s)
     (:html
      (:head (:title "parenscript tutorial: exampl 1"))
