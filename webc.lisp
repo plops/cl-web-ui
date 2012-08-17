@@ -11,7 +11,7 @@
 
 #+nil
 (defparameter *acceptor*
- (start (make-instance 'acceptor :port 8080
+ (start (make-instance 'easy-acceptor :port 8080
 		       :access-log-destination *standard-output*
 		       :message-log-destination *standard-output*)))
 #+nil
@@ -32,3 +32,13 @@ hunchentoot::*easy-handler-alist*
 	    (:a :href "#" :onclick (ps (alert "hello world"))
 		"hello world")
 	    ))))
+
+#+nil
+(ql:quickload "hunchentoot-test")
+#+nil
+(defparameter *acceptor2*
+ (start (make-instance 'acceptor :port 4242
+		       :access-log-destination *standard-output*
+		       :message-log-destination *standard-output*)))
+#+nil
+(hunchentoot-test:test-hunchentoot "http://localhost:4242")
