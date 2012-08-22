@@ -1,3 +1,4 @@
+#+nil
 (ql:quickload '(hunchentoot cl-who parenscript cl-fad))
 
 (defpackage :webc
@@ -32,6 +33,34 @@ hunchentoot::*easy-handler-alist*
 	    (:a :href "#" :onclick (ps (alert "hello world"))
 		"hello world")
 	    ))))
+(define-easy-handler (tutorial2 :uri "/tutorial2") ()
+  (with-html-output-to-string (s)
+    (:html
+     (:head
+      (:title "Parenscript tutorial: 2nd example")
+      (:script :type "text/javascript"
+               (str (ps
+                      (defun greeting-callback ()
+                        (alert "Hello World"))))))
+     (:body
+      (:h2 "Parenscript tutorial: 2nd example")
+      (:a :href "#" :onclick (ps (greeting-callback))
+          "Hello World")))))
+
+(define-easy-handler (tabs :uri "/tabs") ()
+    (with-html-output-to-string (s nil :prologue t :indent t)
+      (:html :lang "en"
+	     (:head
+	      (:link :rel "stylesheet" :type "text/css"
+		     :href "jquery-ui/development-bundle/themes/ui-lightness/jquery.ui.all.css")
+	      (:meta :http-equiv "Content-Type"
+		     :content "text/html; charset=utf-8")
+	      (:title "jQuery UI Tabs Example 1")
+	      )
+	     (:body :bgcolor "white"
+		    "Not much there"))))
+
+
 
 #+nil
 (ql:quickload "hunchentoot-test")
