@@ -57,10 +57,47 @@ hunchentoot::*easy-handler-alist*
 		     :content "text/html; charset=utf-8")
 	      (:title "jQuery UI Tabs Example 1")
 	      )
-	     (:body :bgcolor "white"
-		    "Not much there"))))
+	     (:body 
+	      (:div :id "myTabs"
+		    (:ul (:li (:a "Tab 1" :href "#a"))
+			 (:li (:a "Tab 2" :href "#b")))
+		    (:div "This is the content panel linked to the first tab."
+			  :id "a")
+		    (:div "second tab" :id "b"))
+	      (:script :type "text/javascript"
+		       :src "jquery-ui/development-bundle/jquery-1.8.0.js")
+	      (:script :type "text/javascript"
+		       :src "jquery-ui/development-bundle/ui/jquery.ui.core.js")
+	      (:script :type "text/javascript"
+		       :src "jquery-ui/development-bundle/ui/jquery.ui.tabs.js")
+	      (:script :type "text/javascript"
+		       (str
+			(ps ($ (lambda () (chain ($ "#myTabs") tabs))))))))))
 
 
+(with-html-output-to-string (s nil :prologue t :indent t)
+      (:html :lang "en"
+	     (:head
+	      (:link :rel "stylesheet" :type "text/css"
+		     :href "jquery-ui/development-bundle/themes/ui-lightness/jquery.ui.all.css")
+	      (:meta :http-equiv "Content-Type"
+		     :content "text/html; charset=utf-8")
+	      (:title "jQuery UI Tabs Example 1"))
+	     (:body 
+	      (:div :id "myTabs"
+		    (:ul (:li (:a "Tab 1" :href "#a"))
+			 (:li (:a "Tab 2" :href "#b")))
+		    (:div "This is the content panel linked to the first tab."
+			  :id "a")
+		    (:div "second tab" :id "b"))
+	      (:script :type "text/javascript"
+		       :src "jquery-ui/development-bundle/jquery-1.8.0.js")
+	      (:script :type "text/javascript"
+		       :src "jquery-ui/development-bundle/ui/jquery.ui.core.js")
+	      (:script :type "text/javascript"
+		       :src "jquery-ui/development-bundle/ui/jquery.ui.tabs.js")
+	      (:script :type "text/javascript"
+		       (str (ps ($ (lambda () (chain ($ "#myTabs") tabs)))))))))
 
 #+nil
 (ql:quickload "hunchentoot-test")
