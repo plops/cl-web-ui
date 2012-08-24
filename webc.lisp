@@ -59,22 +59,47 @@ hunchentoot::*easy-handler-alist*
 	      )
 	     (:body 
 	      (:div :id "tabs"
-		    (:ul (:li (:a :href "#tab-1" "Tab 1"))
-			 (:li (:a :href "#tab-2" "Tab 2")))
-		    (:div :id "tab-1"
+		    (:ul (:li (:a :href "#tab-focus" "focus"))
+			 (:li (:a :href "#tab-mma" "mma"))
+			 (:li (:a :href "#tab-lcos" "lcos"))
+			 (:li (:a :href "#tab-cam" "camera")))
+		    (:div :id "tab-mma"
 			  "This is the content panel linked to the first tab.")
-		    (:div :id "tab-2"
+		    (:div :id "tab-focus"
+			  (:ul
+			       (:li (:select :id "selector"
+					     (:option :value "1" "1")
+					     (:option :value "2" "2")
+					     (:option :value "3" "3")))
+			       (:li (:div :id "slider"2))
+			       (:li 
+				"This is the content panel linked to the first tab.")))
+		    (:div :id "tab-lcos"
+			  "This is the content panel linked to the first tab.")
+		    (:div :id "tab-cam"
 			  "second tab"))
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/jquery-1.8.0.js")
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/ui/jquery.ui.core.js")
+	      
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/ui/jquery.ui.widget.js")
 	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/ui/jquery.ui.tabs.js")
+		       :src "jquery-ui/development-bundle/ui/jquery.ui.mouse.js")
 	      (:script :type "text/javascript"
-		       (str (ps ($ (lambda () ((chain ($ "#tabs") tabs)))))))))))
+		       :src "jquery-ui/development-bundle/ui/jquery.ui.slider.js")
+	      (:script :type "text/javascript"
+		       :src "jquery-ui/development-bundle/ui/jquery.ui.tabs.js")
+
+	      (:script :type "text/javascript"
+		       (str (ps ($ (lambda () 
+				     ((chain ($ "#tabs") tabs))
+				     ((chain ($ "#slider") slider))
+				     (chain ($ "#selector") 
+					    (change
+					     (lambda ()
+					       (alert "bal2")))))))))))))
 
 
 #+nil
