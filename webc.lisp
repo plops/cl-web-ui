@@ -99,14 +99,24 @@ hunchentoot::*easy-handler-alist*
 	      (:script :type "text/javascript"
 		       (str (ps ($ (lambda () 
 				     ((chain ($ "#tabs") tabs))
-				     ((chain ($ "#slider") (slider (create slide (lambda ()
-										   ((@ $ get) "/ajax/bla" (lambda (r)
-													    (chain ($ "#value") (html r)))))))))
+				     ((chain ($ "#slider") 
+					     (slider 
+					      (create slide (lambda ()
+							      ((@ $ get) (concatenate 'string 
+										      "ajax/process-slider"
+										      "?slider-value="
+										      (encode-u-r-i-component (chain ($ "#slider") (slider "value")))) 
+							       (lambda (r)
+								 (chain ($ "#value") (html r)))))))))
 				     (chain ($ "#selector") 
 					    (change
 					     (lambda ()
 					       ((@ $ get) "/ajax/bla" (lambda (r)
 								       (chain ($ "#value") (html r))))))))))))))))
+
+(hunchentoot:define-easy-handler (process-slider :uri "/ajax/process-slider") (slider-value)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (format nil "Hey~@[ ~A~]!" slider-value))
 
 
 #+nil
