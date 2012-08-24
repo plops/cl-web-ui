@@ -74,7 +74,8 @@ hunchentoot::*easy-handler-alist*
 					     (:option :value "1" "1")
 					     (:option :value "2" "2")
 					     (:option :value "3" "3")))
-			       (:li (:div :id "value"))
+			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
+			       (:li (:div :id "value2"))
 			       (:li (:div :id "slider"))
 			       (:li 
 				"This is the content panel linked to the first tab.")))
@@ -107,7 +108,8 @@ hunchentoot::*easy-handler-alist*
 										      "?slider-value="
 										      (encode-u-r-i-component (chain ($ "#slider") (slider "value")))) 
 							       (lambda (r)
-								 (chain ($ "#value") (html r)))))))))
+								 #+nil (chain ($ "#value") (html r))
+								 (chain ($ "#value") (attr "value" r)))))))))
 				     (chain ($ "#selector") 
 					    (change
 					     (lambda ()
