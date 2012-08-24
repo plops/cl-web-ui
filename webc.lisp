@@ -47,6 +47,9 @@ hunchentoot::*easy-handler-alist*
       (:a :href "#" :onclick (ps (greeting-callback))
           "Hello World")))))
 
+(define-easy-handler (ajax/bla :uri "/ajax/bla") ()
+    (format nil "~d" (random 123)))
+
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
       (:html :lang "en"
@@ -71,7 +74,8 @@ hunchentoot::*easy-handler-alist*
 					     (:option :value "1" "1")
 					     (:option :value "2" "2")
 					     (:option :value "3" "3")))
-			       (:li (:div :id "slider"2))
+			       (:li (:div :id "value"))
+			       (:li (:div :id "slider"))
 			       (:li 
 				"This is the content panel linked to the first tab.")))
 		    (:div :id "tab-lcos"
@@ -96,10 +100,16 @@ hunchentoot::*easy-handler-alist*
 		       (str (ps ($ (lambda () 
 				     ((chain ($ "#tabs") tabs))
 				     ((chain ($ "#slider") slider))
+				     (chain ($ "#slider") 
+					    (change
+					     (lambda ()
+					       ((@ $ get) "/ajax/bla" (lambda (r)
+								       (chain ($ "#value") (html r)))))))
 				     (chain ($ "#selector") 
 					    (change
 					     (lambda ()
-					       (alert "bal2")))))))))))))
+					       ((@ $ get) "/ajax/bla" (lambda (r)
+								       (chain ($ "#value") (html r))))))))))))))))
 
 
 #+nil
