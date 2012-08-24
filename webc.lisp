@@ -99,12 +99,9 @@ hunchentoot::*easy-handler-alist*
 	      (:script :type "text/javascript"
 		       (str (ps ($ (lambda () 
 				     ((chain ($ "#tabs") tabs))
-				     ((chain ($ "#slider") slider))
-				     (chain ($ "#slider") 
-					    (change
-					     (lambda ()
-					       ((@ $ get) "/ajax/bla" (lambda (r)
-								       (chain ($ "#value") (html r)))))))
+				     ((chain ($ "#slider") (slider (create slide (lambda ()
+										   ((@ $ get) "/ajax/bla" (lambda (r)
+													    (chain ($ "#value") (html r)))))))))
 				     (chain ($ "#selector") 
 					    (change
 					     (lambda ()
