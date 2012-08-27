@@ -53,13 +53,13 @@ hunchentoot::*easy-handler-alist*
 (defun draw-mandelbrot (file pic-number)
   (let* ((png (make-instance 'zpng:png
                              :color-type :grayscale-alpha
-                             :width 200
-                             :height 200))
+                             :width 64
+                             :height 64))
          (image (zpng:data-array png))
          (max 255))
-    (dotimes (y 200 (zpng:write-png png file))
-      (dotimes (x 200)
-	(let ((c (complex (- (/ x 100.0) 1.5 (* pic-number .1)) (- (/ y 100.0) 1.0)))
+    (dotimes (y 64 (zpng:write-png png file))
+      (dotimes (x 64)
+	(let ((c (complex (- (/ x 16.0) 1.5 (* pic-number .1)) (- (/ y 16.0) 1.5)))
               (z (complex 0.0 0.0))
               (iteration 0))
           (loop
@@ -90,12 +90,6 @@ hunchentoot::*easy-handler-alist*
 	image-data))))
 
 
-(with-output-to-string (s (make-array 1 :adjustable t 
-				      :fill-pointer t
-				      :element-type 'flex:octet) 
-			  :element-type '(unsigned-byte 8))
-  (draw-mandelbrot s))
-
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
       (:html :lang "en"
@@ -105,6 +99,7 @@ hunchentoot::*easy-handler-alist*
 	      (:meta :http-equiv "Content-Type"
 		     :content "text/html; charset=utf-8")
 	      (:title "jQuery UI Tabs Example 1")
+	      (:style "#draggable {width:150px; height:150px; padding:0.5em;}")
 	      )
 	     (:body 
 	      (:div :id "tabs"
@@ -122,6 +117,8 @@ hunchentoot::*easy-handler-alist*
 					     (:option :value "3" "3")))
 			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
 			       (:li (:div :id "value2"))
+			       (:li (:div :id "draggable" :class "ui-widget-content"
+					  (:p "drag me around")))
 			       (:li (:div :id "slider"))
 			       (:li (:table (loop for j below 3 do
 						 (htm 
@@ -132,23 +129,17 @@ hunchentoot::*easy-handler-alist*
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-cam"
 			  "second tab"))
-	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/jquery-1.8.0.js")
-	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/ui/jquery.ui.core.js")
 	      
 	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/ui/jquery.ui.widget.js")
-	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/ui/jquery.ui.mouse.js")
-	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/ui/jquery.ui.slider.js")
-	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/ui/jquery.ui.tabs.js")
-
+		       :src "jquery-ui/development-bundle/jquery-1.8.0.js")
+	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable") do
+		   (htm (:script :type "text/javascript"
+				 :src (concatenate 'string "jquery-ui/development-bundle/ui/jquery.ui." e ".js"))))
+	      
 	      (:script :type "text/javascript"
 		       (str (ps ($ (lambda () 
 				     ((chain ($ "#tabs") tabs))
+				     ((chain ($ "#draggable") draggable))
 				     ((chain ($ "#slider") 
 					     (slider 
 					      (create slide (lambda ()
