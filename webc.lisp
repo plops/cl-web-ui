@@ -1,5 +1,5 @@
 #+nil
-(ql:quickload '(hunchentoot cl-who parenscript cl-fad))
+(ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng))
 
 (defpackage :webc
   (:use #:cl #:hunchentoot
@@ -50,6 +50,52 @@ hunchentoot::*easy-handler-alist*
 (define-easy-handler (ajax/bla :uri "/ajax/bla") ()
     (format nil "~d" (random 123)))
 
+(defun draw-mandelbrot (file)
+  (let* ((png (make-instance 'zpng:png
+                             :color-type :grayscale-alpha
+                             :width 200
+                             :height 200))
+         (image (zpng:data-array png))
+         (max 255))
+    (dotimes (y 200 (zpng:write-png png file))
+      (dotimes (x 200)
+        (let ((c (complex (- (/ x 100.0) 1.5) (- (/ y 100.0) 1.0)))
+              (z (complex 0.0 0.0))
+              (iteration 0))
+          (loop
+	     (setf z (+ (* z z) c))
+	     (incf iteration)
+	     (cond ((< 4 (abs z))
+		    (setf (aref image y x 1) iteration)
+		    (return))
+		   ((= iteration max)
+		    (setf (aref image y x 1) 255)
+		    (return)))))))))
+
+
+
+
+#+NIL
+(time 
+ (draw-mandelbrot "/dev/shm/o.png"))
+
+(define-easy-handler (mma :uri "/mma") (pic-number)
+  (setf (hunchentoot:content-type*) "image/png")
+  (let ((fn (make-pathname :name "mma" :type "png" :version nil)))
+    (draw-mandelbrot fn)
+    (with-open-file (in fn :element-type '(unsigned-byte 8))
+      (let ((image-data (make-array (file-length in)
+				    :element-type 'flex:octet)))
+	(read-sequence image-data in)
+	image-data))))
+
+
+(with-output-to-string (s (make-array 1 :adjustable t 
+				      :fill-pointer t
+				      :element-type 'flex:octet) 
+			  :element-type '(unsigned-byte 8))
+  (draw-mandelbrot s))
+
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
       (:html :lang "en"
@@ -77,8 +123,8 @@ hunchentoot::*easy-handler-alist*
 			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
 			       (:li (:div :id "value2"))
 			       (:li (:div :id "slider"))
-			       (:li 
-				"This is the content panel linked to the first tab.")))
+			       (:li (:table (:tr (:td "1") (:td "2") (:td "3"))
+					    (:tr (:td "5") (:td "2") (:td "5"))))))
 		    (:div :id "tab-lcos"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-cam"
