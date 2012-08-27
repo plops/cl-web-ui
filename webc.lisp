@@ -132,7 +132,7 @@ hunchentoot::*easy-handler-alist*
 	      
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/jquery-1.8.0.js")
-	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable") do
+	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable" "resizable") do
 		   (htm (:script :type "text/javascript"
 				 :src (concatenate 'string "jquery-ui/development-bundle/ui/jquery.ui." e ".js"))))
 	      
@@ -140,6 +140,8 @@ hunchentoot::*easy-handler-alist*
 		       (str (ps ($ (lambda () 
 				     ((chain ($ "#tabs") tabs))
 				     ((chain ($ "#draggable") draggable))
+				     ((chain ($ "#draggable") resizable))
+				     
 				     ((chain ($ "#slider") 
 					     (slider 
 					      (create slide (lambda ()
