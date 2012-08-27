@@ -99,7 +99,9 @@ hunchentoot::*easy-handler-alist*
 	      (:meta :http-equiv "Content-Type"
 		     :content "text/html; charset=utf-8")
 	      (:title "jQuery UI Tabs Example 1")
-	      (:style "#draggable {width:150px; height:150px; padding:0.5em;}")
+	      (:style "#draggable {width:150px; height:150px; padding:0.5em;}
+#camera-chip {width:400px; height:300px; padding:0.5em;}
+#draggable p { text-align: center; margin: 0; }")
 	      )
 	     (:body 
 	      (:div :id "tabs"
@@ -110,6 +112,9 @@ hunchentoot::*easy-handler-alist*
 		    (:div :id "tab-mma"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-focus"
+			  (:div :id "camera-chip" :class "ui-widget-content"
+					  (:div :id "draggable" :class "ui-widget-content"
+						(:p :class "ui-widget-content" "region of interest")))
 			  (:ul
 			       (:li (:select :id "selector"
 					     (:option :value "1" "1")
@@ -117,8 +122,6 @@ hunchentoot::*easy-handler-alist*
 					     (:option :value "3" "3")))
 			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
 			       (:li (:div :id "value2"))
-			       (:li (:div :id "draggable" :class "ui-widget-content"
-					  (:p "drag me around")))
 			       (:li (:div :id "slider"))
 			       (:li (:table (loop for j below 3 do
 						 (htm 
@@ -139,8 +142,8 @@ hunchentoot::*easy-handler-alist*
 	      (:script :type "text/javascript"
 		       (str (ps ($ (lambda () 
 				     ((chain ($ "#tabs") tabs))
-				     ((chain ($ "#draggable") draggable))
-				     ((chain ($ "#draggable") resizable))
+				     (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
+				     (chain ($ "#draggable") (resizable (create containment "#camera-chip")))
 				     
 				     ((chain ($ "#slider") 
 					     (slider 
