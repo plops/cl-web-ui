@@ -59,7 +59,8 @@ hunchentoot::*easy-handler-alist*
          (max 255))
     (dotimes (y 200 (zpng:write-png png file))
       (dotimes (x 200)
-        (let ((c (complex (- (/ x 100.0) 1.5) (- (/ y 100.0) 1.0)))
+	(setf (aref image y x 1) x)
+        #+nil (let ((c (complex (- (/ x 100.0) 1.5) (- (/ y 100.0) 1.0)))
               (z (complex 0.0 0.0))
               (iteration 0))
           (loop
