@@ -50,7 +50,7 @@ hunchentoot::*easy-handler-alist*
 (define-easy-handler (ajax/bla :uri "/ajax/bla") ()
     (format nil "~d" (random 123)))
 
-(defun draw-mandelbrot (file)
+(defun draw-mandelbrot (file pic-number)
   (let* ((png (make-instance 'zpng:png
                              :color-type :grayscale-alpha
                              :width 200
@@ -59,8 +59,7 @@ hunchentoot::*easy-handler-alist*
          (max 255))
     (dotimes (y 200 (zpng:write-png png file))
       (dotimes (x 200)
-	(setf (aref image y x 1) x)
-        #+nil (let ((c (complex (- (/ x 100.0) 1.5) (- (/ y 100.0) 1.0)))
+	(let ((c (complex (- (/ x 100.0) 1.5 (* pic-number .1)) (- (/ y 100.0) 1.0)))
               (z (complex 0.0 0.0))
               (iteration 0))
           (loop
@@ -83,7 +82,7 @@ hunchentoot::*easy-handler-alist*
 (define-easy-handler (mma :uri "/mma") (pic-number)
   (setf (hunchentoot:content-type*) "image/png")
   (let ((fn (make-pathname :name "mma" :type "png" :version nil)))
-    (draw-mandelbrot fn)
+    (draw-mandelbrot fn (read-from-string pic-number))
     (with-open-file (in fn :element-type '(unsigned-byte 8))
       (let ((image-data (make-array (file-length in)
 				    :element-type 'flex:octet)))
@@ -124,8 +123,11 @@ hunchentoot::*easy-handler-alist*
 			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
 			       (:li (:div :id "value2"))
 			       (:li (:div :id "slider"))
-			       (:li (:table (:tr (:td "1") (:td "2") (:td "3"))
-					    (:tr (:td "5") (:td "2") (:td "5"))))))
+			       (:li (:table (loop for j below 3 do
+						 (htm 
+						  (:tr (loop for i below 3 do
+							    (htm
+							     (:td (:image :src (format nil "/mma?pic-number=~d" (+ j (* 3 i))))))))))))))
 		    (:div :id "tab-lcos"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-cam"
