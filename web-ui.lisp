@@ -8,6 +8,8 @@
 
 (in-package :webc)
 
+(declaim (optimize (speed 3) (safety 1) (debug 1)))
+
 (setf parenscript:*js-string-delimiter* #\")
 
 #+nil
@@ -50,6 +52,7 @@ hunchentoot::*easy-handler-alist*
 (define-easy-handler (ajax/bla :uri "/ajax/bla") ()
     (format nil "~d" (random 123)))
 
+
 (defun draw-mandelbrot (file pic-number)
   (let* ((png (make-instance 'zpng:png
                              :color-type :grayscale-alpha
@@ -75,6 +78,8 @@ hunchentoot::*easy-handler-alist*
 
 
 
+
+
 #+NIL
 (time 
  (draw-mandelbrot "/dev/shm/o.png"))
@@ -89,6 +94,33 @@ hunchentoot::*easy-handler-alist*
 	(read-sequence image-data in)
 	image-data))))
 
+(progn
+ (defun draw-circle (file w h)
+   (let* ((png (make-instance 'zpng:png
+			      :color-type :grayscale
+			      :width w
+			      :height h))
+	  (image (zpng:data-array png)))
+     (dotimes (y h (zpng:write-png png file))
+       (dotimes (x w)
+	 (let ((xx (- (/ x w) .5))
+	       (yy (- (/ y h) .5)))
+	   (if (< (+ (expt xx 2) (expt yy 2)) (expt .4 2))
+	       (setf (aref image y x 0) 0)
+	       (setf (aref image y x 0) 255)))))))
+
+ (define-easy-handler (circle :uri "/circle") (width height)
+   (setf (hunchentoot:content-type*) "image/png")
+   (let ((fn (make-pathname :name "circle" :type "png" :version nil)))
+     (draw-circle fn (read-from-string width) (read-from-string height))
+     (with-open-file (in fn :element-type '(unsigned-byte 8))
+       (let ((image-data (make-array (file-length in)
+				     :element-type 'flex:octet)))
+	 (read-sequence image-data in)
+	 image-data)))))
+
+
+
 
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
@@ -99,8 +131,8 @@ hunchentoot::*easy-handler-alist*
 	      (:meta :http-equiv "Content-Type"
 		     :content "text/html; charset=utf-8")
 	      (:title "jQuery UI Tabs Example 1")
-	      (:style "#draggable {width:150px; height:150px; padding:0.5em;}
-#camera-chip {width:400px; height:300px; padding:0.5em;}
+	      (:style "#draggable {width:150px; height:150px; padding:0; margin:0;}
+#camera-chip {width:400px; height:300px; padding:0; margin:0;}
 #draggable p { text-align: center; margin: 0; }")
 	      )
 	     (:body 
@@ -113,8 +145,9 @@ hunchentoot::*easy-handler-alist*
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-focus"
 			  (:div :id "camera-chip" :class "ui-widget-content"
-					  (:div :id "draggable" :class "ui-widget-content"
-						(:p :class "ui-widget-content" "region of interest")))
+				(:img :src "/circle?width=320&height=240")
+				(:div :id "draggable" :class "ui-widget-content"
+				      (:p :class "ui-widget-content" "region of interest")))
 			  (:ul
 			       (:li (:select :id "selector"
 					     (:option :value "1" "1")
@@ -142,8 +175,10 @@ hunchentoot::*easy-handler-alist*
 	      (:script :type "text/javascript"
 		       (str (ps ($ (lambda () 
 				     ((chain ($ "#tabs") tabs))
-				     (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
-				     (chain ($ "#draggable") (resizable (create containment "#camera-chip")))
+				     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
+				     #+nil (chain ($ "#draggable") (resizable (create
+									 containment "#camera-chip"
+									 )))
 				     
 				     ((chain ($ "#slider") 
 					     (slider 
