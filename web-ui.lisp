@@ -1,5 +1,5 @@
-#+nil
-(ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng))
+(eval-when (:execute :load-toplevel :compile-toplevel)
+ (ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng)))
 
 (defpackage :webc
   (:use #:cl #:hunchentoot
@@ -127,7 +127,7 @@ hunchentoot::*easy-handler-alist*
       (:html :lang "en"
 	     (:head
 	      (:link :rel "stylesheet" :type "text/css"
-		     :href "jquery-ui/development-bundle/themes/ui-lightness/jquery.ui.all.css")
+		     :href "jquery-ui/development-bundle/themes/base/jquery.ui.all.css")
 	      (:meta :http-equiv "Content-Type"
 		     :content "text/html; charset=utf-8")
 	      (:title "jQuery UI Tabs Example 1")
@@ -167,7 +167,7 @@ hunchentoot::*easy-handler-alist*
 			  "second tab"))
 	      
 	      (:script :type "text/javascript"
-		       :src "jquery-ui/development-bundle/jquery-1.8.0.js")
+		       :src "jquery-ui/development-bundle/jquery-1.8.1.min.js")
 	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable" "resizable") do
 		   (htm (:script :type "text/javascript"
 				 :src (concatenate 'string "jquery-ui/development-bundle/ui/jquery.ui." e ".js"))))
