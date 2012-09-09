@@ -90,18 +90,22 @@ hunchentoot::*easy-handler-alist*
 					;:endpoint #x83 ; 2 #x81 #x83qu
 		   ))
   (libusb0::prepare-zeiss))
+(defun zeiss-mcu-read-position ()
+ (loop for e in '(X Y Z) collect
+      (let* ((str (format nil "~Ai;" e))
+	     (a (make-array (length str)
+			    :element-type '(unsigned-byte 8)
+			    :initial-contents (map 'list #'char-code str))))
+	(libusb0::bulk-write libusb0::*bla* a :endpoint 2)
+	(sleep .1)
+	(list e
+	      (let ((str ;; remove trailing ^M
+		     (map 'string #'code-char
+			  (libusb0::bulk-read libusb0::*bla* #x5 :endpoint #x83))))
+		(read-from-string (subseq str 0 (1- (length str)))))))))
 
 #+nil
-(loop for e in '(X Y Z) collect
- (let* ((str (format nil "~Ai;" e))
-	(a (make-array (length str)
-		       :element-type '(unsigned-byte 8)
-		       :initial-contents (map 'list #'char-code str))))
-   (libusb0::bulk-write libusb0::*bla* a :endpoint 2)
-   (sleep .1)
-   (list e
-    (map 'string #'code-char
-	 (libusb0::bulk-read libusb0::*bla* #x5 :endpoint #x83)))))
+(zeiss-mcu-read-position)
 
 #+NIL
 (time 
@@ -167,17 +171,19 @@ hunchentoot::*easy-handler-alist*
 		    (:div :id "tab-mma"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-focus"
-			  (:div :id "camera-chip" :class "ui-widget-content"
+			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
 				(:div :id "draggable" :class "ui-widget-content"
 				      (:p :class "ui-widget-content" "region of interest")))
 			  (:ul
-			       (:li (:select :id "selector"
+			       #+nil(:li (:select :id "selector"
 					     (:option :value "1" "1")
 					     (:option :value "2" "2")
 					     (:option :value "3" "3")))
 			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
-			       (:li (:div :id "value2"))
+			      #+nil (:li (:div :id "value2"))
+			       (:li (loop for (coord val) in (zeiss-mcu-read-position) do
+					 (htm (:p (str val)))))
 			       (:li (:div :id "slider"))
 			       (:li (:table (loop for j below 3 do
 						 (htm 
