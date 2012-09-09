@@ -76,9 +76,32 @@ hunchentoot::*easy-handler-alist*
 		    (return)))))))))
 
 
+#+nil
+(load "../cl-pl2303/libusb0.lisp")
 
+#+nil
+(progn
+  (defparameter libusb0::*bla*
+    (make-instance 'libusb0::usb-connection
+		   :vendor-id #x067b
+		   :product-id #x2303
+		   :configuration 1
+		   :interface 0
+					;:endpoint #x83 ; 2 #x81 #x83qu
+		   ))
+  (libusb0::prepare-zeiss))
 
-
+#+nil
+(loop for e in '(X Y Z) collect
+ (let* ((str (format nil "~Ai;" e))
+	(a (make-array (length str)
+		       :element-type '(unsigned-byte 8)
+		       :initial-contents (map 'list #'char-code str))))
+   (libusb0::bulk-write libusb0::*bla* a :endpoint 2)
+   (sleep .1)
+   (list e
+    (map 'string #'code-char
+	 (libusb0::bulk-read libusb0::*bla* #x5 :endpoint #x83)))))
 
 #+NIL
 (time 
