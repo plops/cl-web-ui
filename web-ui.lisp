@@ -181,14 +181,21 @@ hunchentoot::*easy-handler-alist*
 					     (:option :value "3" "3")))
 			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
 			      #+nil (:li (:div :id "value2"))
-			       (:li (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) do
-					 (htm (:p (str val)))))
+			       (:li (loop for (coord val) in
+					 (zeiss-mcu-read-position *zeiss-connection*) do
+					 (htm (:input :id coord
+						      :type "text" :maxlength "5"
+						      :value val))))
 			       (:li (:div :id "slider"))
-			       (:li (:table (loop for j below 3 do
-						 (htm 
-						  (:tr (loop for i below 3 do
-							    (htm
-							     (:td (:image :src (format nil "/mma?pic-number=~d" (+ j (* 3 i))))))))))))))
+			       (:li (:table
+				     (loop for j below 3 do
+					  (htm 
+					   (:tr (loop for i below 3 do
+						     (htm
+						      (:td (:image 
+							    :src
+							    (format nil "/mma?pic-number=~d" 
+								    (+ j (* 3 i))))))))))))))
 		    (:div :id "tab-lcos"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-cam"
@@ -200,29 +207,33 @@ hunchentoot::*easy-handler-alist*
 		   (htm (:script :type "text/javascript"
 				 :src (concatenate 'string "jquery-ui/development-bundle/ui/jquery.ui." e ".js"))))
 	      
-	      (:script :type "text/javascript"
-		       (str (ps ($ (lambda () 
-				     ((chain ($ "#tabs") tabs))
-				     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
-				     #+nil (chain ($ "#draggable") (resizable (create
-									 containment "#camera-chip"
-									 )))
-				     
-				     ((chain ($ "#slider") 
-					     (slider 
-					      (create slide (lambda ()
-							      ((@ $ get) (concatenate 'string 
-										      "ajax/process-slider"
-										      "?slider-value="
-										      (encode-u-r-i-component (chain ($ "#slider") (slider "value")))) 
-							       (lambda (r)
-								 #+nil (chain ($ "#value") (html r))
-								 (chain ($ "#value") (attr "value" r)))))))))
-				     (chain ($ "#selector") 
-					    (change
-					     (lambda ()
-					       ((@ $ get) "/ajax/bla" (lambda (r)
-								       (chain ($ "#value") (html r))))))))))))))))
+	      (:script 
+	       :type "text/javascript"
+	       (str (ps ($ (lambda () 
+			     ((chain ($ "#tabs") tabs))
+			     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
+			     #+nil (chain ($ "#draggable") (resizable (create
+								       containment "#camera-chip"
+								       )))
+			     
+			     ((chain ($ "#slider") 
+				     (slider 
+				      (create slide
+					      (lambda ()
+						((@ $ get)
+						 (concatenate 'string 
+							      "ajax/process-slider"
+							      "?slider-value="
+							      (encode-u-r-i-component 
+							       (chain ($ "#slider") (slider "value")))) 
+						 (lambda (r)
+						   #+nil (chain ($ "#value") (html r))
+						   (chain ($ "#value") (attr "value" r)))))))))
+			     (chain ($ "#selector") 
+				    (change
+				     (lambda ()
+				       ((@ $ get) "/ajax/bla" (lambda (r)
+								(chain ($ "#value") (html r))))))))))))))))
 
 (hunchentoot:define-easy-handler (process-slider :uri "/ajax/process-slider") (slider-value)
   (setf (hunchentoot:content-type*) "text/plain")
