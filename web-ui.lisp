@@ -10,13 +10,18 @@
 
 #+nil
 (and::initialize)
+
+(defun clara-capture-image ()
+  (when (eq (and::get-status)
+	    'SB-ANDOR2-WIN-INTERNAL::DRV_IDLE)
+   (progn
+     (and::start-acquisition)
+     (and::wait-for-acquisition*)
+     (sleep .1)
+     (and::get-most-recent-image))))
 #+nil
-(progn
-  (and::start-acquisition)
-  (and::wait-for-acquisition*)
-  (sleep .1)
-  (defparameter *clara-image*
-    (and::get-most-recent-image)))
+(defparameter *clara-image* (clara-capture-image))
+
 #+nil
 (and::*bla*)
 
@@ -25,9 +30,11 @@
 
 #+nil
 (progn 
-  (and::set-acquisition-mode 'and::single-scan)
+  (and::set-acquisition-mode 
+   'and::kinetics
+   #+nil 'and::single-scan)
   (and::set-exposure-time .02)
-  (and::check (and::set-number-accumulations* 1))
+  (and::check (and::set-number-accumulations* 10))
   ;; (check (set-accumulation-cycle-time* .2))
   (and::check (and::set-kinetic-cycle-time* .06f0))
   (and::check (and::set-number-kinetics* 1))
@@ -46,9 +53,9 @@
   (and::check (and::cooler-on*))
   ;(set-isolated-crop-mode* 0 *h* *w* 1 1)
   (let ((xstart 401)
-	(ystart 401)
+	(ystart 321)
 	(xend 912)
-	(yend 912))
+	(yend (- 912 80)))
     (and::set-image :xstart xstart :ystart ystart :xend xend :yend yend)
     (setf and::*w* (1+ (- xend xstart))
 	  and::*h* (1+ (- yend ystart))))
@@ -221,8 +228,9 @@ hunchentoot::*easy-handler-alist*
 
 (defvar *clara-image* nil)
 
-(define-easy-handler (clara-image :uri "/clara-image") ()
+(define-easy-handler (clara-image :uri "/clara-image") (time)
    (setf (hunchentoot:content-type*) "image/png")
+   (defparameter *clara-image* (clara-capture-image))
    (destructuring-bind (w h) (array-dimensions *clara-image*)
      (let* ((png (make-instance 'zpng:png
 				:color-type :grayscale
@@ -231,13 +239,15 @@ hunchentoot::*easy-handler-alist*
 	    (image (zpng:data-array png))
 	    (fn (make-pathname :name "clara-image" :type "png" :version nil))
 	    (ci1 (when *clara-image* 
-		   (sb-ext:array-storage-vector *clara-image*))))
+		   (sb-ext:array-storage-vector *clara-image*)))
+	    (ma (reduce #'max ci1))
+	    (mi (reduce #'min ci1)))
        (dotimes (y h (zpng:write-png png fn))
 	 (dotimes (x w)
 	   (setf (aref image y x 0)
 		 (if *clara-image*
 		     (min 255 (max 0 
-				   (floor (- (aref ci1 (+ x (* w y))) 500) 1.0)))
+				   (floor (- (aref ci1 (+ x (* w y))) mi) (- ma mi))))
 		     128))))
        (with-open-file (in fn :element-type '(unsigned-byte 8))
 	(let ((image-data (make-array (file-length in)
@@ -268,7 +278,8 @@ hunchentoot::*easy-handler-alist*
 		    (:div :id "tab-mma"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-focus"
-			  (:img :src "/clara-image")
+			  (:button :id "capture-button" "capture")
+			  (:img :id "clara-image" :src "/clara-image")
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
 				(:div :id "draggable" :class "ui-widget-content"
@@ -278,14 +289,14 @@ hunchentoot::*easy-handler-alist*
 					     (:option :value "1" "1")
 					     (:option :value "2" "2")
 					     (:option :value "3" "3")))
-			       (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
+			      #+nil (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
 			      #+nil (:li (:div :id "value2"))
 			       (:li (loop for (coord val) in
 					 (zeiss-mcu-read-position *zeiss-connection*) do
 					 (htm (:div (str coord) (:input :id coord
 								  :type "text" :maxlength "5"
 								  :value val)))))
-			       (:li (:div :id "slider"))
+			      #+nil (:li (:div :id "slider"))
 			      #+nil (:li (:table
 				     (loop for j below 3 do
 					  (htm 
@@ -302,7 +313,7 @@ hunchentoot::*easy-handler-alist*
 	      
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/jquery-1.8.1.min.js")
-	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable" "resizable") do
+	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable" "resizable" "button") do
 		   (htm (:script :type "text/javascript"
 				 :src (concatenate 'string "jquery-ui/development-bundle/ui/jquery.ui." e ".js"))))
 	      
@@ -311,7 +322,11 @@ hunchentoot::*easy-handler-alist*
 	       
 	       (str (ps ($ (lambda () 
 			     ((chain ($ "#tabs") tabs))
-			
+			     ((chain ($ "#capture-button") button))
+			     (chain ($ "#capture-button") (click (lambda ()
+								   (chain ($ "#clara-image") (attr "src" 
+												  (concatenate 'string "/clara-image?"
+													       ((chain (new (*date)) get-time))))))))
 			     (chain ($ "#X")
 				    (change
 				     (lambda ()
