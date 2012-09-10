@@ -2,6 +2,59 @@
  (ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng))
  (load "../cl-pl2303/libusb0.lisp"))
 
+(setf asdf:*central-registry* 
+      #+(and win32 x86-64) '("C:/Users/martin/stage/sb-andor2-win/")
+      #+linux '("~/stage/sb-andor2-win/"))
+
+(require :sb-andor2-win)
+
+#+nil
+(and::initialize)
+#+nil
+(progn
+  (and::start-acquisition)
+  (and::wait-for-acquisition*)
+  (sleep .1)
+  (defparameter *clara-image*
+    (and::get-most-recent-image)))
+#+nil
+(and::*bla*)
+
+#+nil
+(and::get-status)
+
+#+nil
+(progn 
+  (and::set-acquisition-mode 'and::single-scan)
+  (and::set-exposure-time .02)
+  (and::check (and::set-number-accumulations* 1))
+  ;; (check (set-accumulation-cycle-time* .2))
+  (and::check (and::set-kinetic-cycle-time* .06f0))
+  (and::check (and::set-number-kinetics* 1))
+  (and::set-read-mode 'and::image)
+  (and::set-vs-speed)
+  ;; Note: there is a 10us gap in SHUTTER before FIRE starts
+  (and::check (and::set-shutter* 1
+				 0 ;; auto
+				 0 ;; closing time 
+				 2 ;; opening time in ms
+				 )) 
+  (and::check (and::set-frame-transfer-mode* 0))
+  (and::set-fastest-hs-speed)
+  (and::set-trigger-mode 'and::internal)
+  (and::check (and::set-temperature* -40))
+  (and::check (and::cooler-on*))
+  ;(set-isolated-crop-mode* 0 *h* *w* 1 1)
+  (let ((xstart 401)
+	(ystart 401)
+	(xend 912)
+	(yend 912))
+    (and::set-image :xstart xstart :ystart ystart :xend xend :yend yend)
+    (setf and::*w* (1+ (- xend xstart))
+	  and::*h* (1+ (- yend ystart))))
+  
+  (and::get-acquisition-timings))
+
 (defpackage :webc
   (:use #:cl #:hunchentoot
 	#:cl-who #:parenscript
@@ -9,7 +62,7 @@
 
 (in-package :webc)
 
-(declaim (optimize (speed 3) (safety 1) (debug 1)))
+(declaim (optimize (speed 0) (safety 3) (debug 3)))
 
 (setf parenscript:*js-string-delimiter* #\")
 
@@ -166,7 +219,31 @@ hunchentoot::*easy-handler-alist*
 	 (read-sequence image-data in)
 	 image-data)))))
 
+(defvar *clara-image* nil)
 
+(define-easy-handler (clara-image :uri "/clara-image") ()
+   (setf (hunchentoot:content-type*) "image/png")
+   (destructuring-bind (w h) (array-dimensions *clara-image*)
+     (let* ((png (make-instance 'zpng:png
+				:color-type :grayscale
+				:width w
+				:height h))
+	    (image (zpng:data-array png))
+	    (fn (make-pathname :name "clara-image" :type "png" :version nil))
+	    (ci1 (when *clara-image* 
+		   (sb-ext:array-storage-vector *clara-image*))))
+       (dotimes (y h (zpng:write-png png fn))
+	 (dotimes (x w)
+	   (setf (aref image y x 0)
+		 (if *clara-image*
+		     (min 255 (max 0 
+				   (floor (- (aref ci1 (+ x (* w y))) 500) 1.0)))
+		     128))))
+       (with-open-file (in fn :element-type '(unsigned-byte 8))
+	(let ((image-data (make-array (file-length in)
+				      :element-type '(unsigned-byte 8))))
+	  (read-sequence image-data in)
+	  image-data)))))
 
 
 (define-easy-handler (tabs :uri "/tabs") ()
@@ -191,6 +268,7 @@ hunchentoot::*easy-handler-alist*
 		    (:div :id "tab-mma"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-focus"
+			  (:img :src "/clara-image")
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
 				(:div :id "draggable" :class "ui-widget-content"
