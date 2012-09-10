@@ -113,6 +113,20 @@ hunchentoot::*easy-handler-alist*
 			:initial-contents (map 'list #'char-code str))))
     (libusb0::bulk-write con a :endpoint 2)))
 
+(defmethod zeiss-mcu-write-position-y ((con libusb0::usb-connection) pos)
+  (let* ((str (format nil "!!YA~d;" pos))
+	 (a (make-array (length str)
+			:element-type '(unsigned-byte 8)
+			:initial-contents (map 'list #'char-code str))))
+    (libusb0::bulk-write con a :endpoint 2)))
+
+(defmethod zeiss-mcu-write-position-z ((con libusb0::usb-connection) pos)
+  (let* ((str (format nil "!!ZA~d;" pos))
+	 (a (make-array (length str)
+			:element-type '(unsigned-byte 8)
+			:initial-contents (map 'list #'char-code str))))
+    (libusb0::bulk-write con a :endpoint 2)))
+
 #+NIL
 (time 
  (draw-mandelbrot "/dev/shm/o.png"))
@@ -190,9 +204,9 @@ hunchentoot::*easy-handler-alist*
 			      #+nil (:li (:div :id "value2"))
 			       (:li (loop for (coord val) in
 					 (zeiss-mcu-read-position *zeiss-connection*) do
-					 (htm (:input :id coord
-						      :type "text" :maxlength "5"
-						      :value val))))
+					 (htm (:div (str coord) (:input :id coord
+								  :type "text" :maxlength "5"
+								  :value val)))))
 			       (:li (:div :id "slider"))
 			      #+nil (:li (:table
 				     (loop for j below 3 do
@@ -216,12 +230,10 @@ hunchentoot::*easy-handler-alist*
 	      
 	      (:script 
 	       :type "text/javascript"
+	       
 	       (str (ps ($ (lambda () 
 			     ((chain ($ "#tabs") tabs))
-			     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
-			     #+nil (chain ($ "#draggable") (resizable (create
-								       containment "#camera-chip"
-								       )))
+			
 			     (chain ($ "#X")
 				    (change
 				     (lambda ()
@@ -233,6 +245,34 @@ hunchentoot::*easy-handler-alist*
 						      (chain ($ "#X") (val))))
 					(lambda (r) ;; replace value with response
 					  (chain ($ "#X") (val r)))))))
+
+			     (chain ($ "#Y")
+				    (change
+				     (lambda ()
+				       ((@ $ get) 
+					(concatenate 'string
+						     "/ajax/y-motor-controller"
+						     "?value=" ;; send value to server
+						     (encode-u-r-i-component
+						      (chain ($ "#Y") (val))))
+					(lambda (r) ;; replace value with response
+					  (chain ($ "#Y") (val r)))))))
+			     (chain ($ "#Z")
+				    (change
+				     (lambda ()
+				       ((@ $ get) 
+					(concatenate 'string
+						     "/ajax/z-motor-controller"
+						     "?value=" ;; send value to server
+						     (encode-u-r-i-component
+						      (chain ($ "#Z") (val))))
+					(lambda (r) ;; replace value with response
+					  (chain ($ "#Z") (val r)))))))
+			     
+			     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
+			     #+nil (chain ($ "#draggable") (resizable (create
+								       containment "#camera-chip"
+								       )))
 			     #+nil((chain ($ "#slider") 
 				     (slider 
 				      (create slide
@@ -259,6 +299,14 @@ hunchentoot::*easy-handler-alist*
 (hunchentoot:define-easy-handler (x-motor-controller :uri "/ajax/x-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
   (zeiss-mcu-write-position-x *zeiss-connection* (read-from-string value))
+  value)
+(hunchentoot:define-easy-handler (y-motor-controller :uri "/ajax/y-motor-controller") (value)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (zeiss-mcu-write-position-y *zeiss-connection* (read-from-string value))
+  value)
+(hunchentoot:define-easy-handler (z-motor-controller :uri "/ajax/z-motor-controller") (value)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (zeiss-mcu-write-position-z *zeiss-connection* (read-from-string value))
   value)
 
 #+nil
