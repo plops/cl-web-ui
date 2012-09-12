@@ -17,7 +17,9 @@
    (progn
      (and::start-acquisition)
      (and::wait-for-acquisition*)
-     (sleep .1)
+     (multiple-value-bind (a b c)
+	 (and::get-acquisition-timings)
+       (sleep c))
      (and::get-most-recent-image))))
 #+nil
 (defparameter *clara-image* (clara-capture-image))
@@ -28,39 +30,63 @@
 #+nil
 (and::get-status)
 
-#+nil
-(progn 
-  (and::set-acquisition-mode 
-   'and::kinetics
-   #+nil 'and::single-scan)
-  (and::set-exposure-time .02)
-  (and::check (and::set-number-accumulations* 10))
-  ;; (check (set-accumulation-cycle-time* .2))
-  (and::check (and::set-kinetic-cycle-time* .06f0))
-  (and::check (and::set-number-kinetics* 1))
-  (and::set-read-mode 'and::image)
-  (and::set-vs-speed)
-  ;; Note: there is a 10us gap in SHUTTER before FIRE starts
-  (and::check (and::set-shutter* 1
-				 0 ;; auto
-				 0 ;; closing time 
-				 2 ;; opening time in ms
-				 )) 
-  (and::check (and::set-frame-transfer-mode* 0))
-  (and::set-fastest-hs-speed)
-  (and::set-trigger-mode 'and::internal)
-  (and::check (and::set-temperature* -40))
-  (and::check (and::cooler-on*))
-  ;(set-isolated-crop-mode* 0 *h* *w* 1 1)
-  (let ((xstart 401)
-	(ystart 321)
-	(xend 912)
-	(yend (- 912 80)))
+
+(defclass clara-camera ()
+  ((xstart :accessor xstart :initform 470 :initarg :xstart)
+   (xend :accessor xend :initform 850 :initarg :xend)
+   (ystart :accessor ystart :initform 350 :initarg :ystart)
+   (yend :accessor yend :initform 750 :initarg :yend)
+   (w :accessor w :initform 1392 :initarg :w)
+   (h :accessor h :initform 1040 :initarg :h)
+   (exposure-time :accessor exposure-time :initform .02f0
+		  :initarg :exposure-time)
+   (cycle-time :accessor cycle-time :initform .045f0 :initarg :cycle-time)
+   (accumulations :accessor accumulations :initform 10 :initarg :accumulations)
+   ))
+
+(defmethod clara-set-parameters ((camera clara-camera))
+  (with-slots
+	(xstart xend ystart yend w h exposure-time cycle-time accumulations)
+      camera
+    (and::set-acquisition-mode 'and::kinetics)
+    (and::set-exposure-time exp-time-s)
+    (and::check (and::set-number-accumulations* accumulations))
+    ;; (check (set-accumulation-cycle-time* .2))
+    (and::check (and::set-kinetic-cycle-time* cycle-time))
+    (and::check (and::set-number-kinetics* 1))
+    (and::set-read-mode 'and::image)
+    (and::set-vs-speed)
+    ;; Note: there is a 10us gap in SHUTTER before FIRE starts
+    (and::check (and::set-shutter* 1
+				   0 ;; auto
+				   0 ;; closing time 
+				   2 ;; opening time in ms
+				   )) 
+    (and::check (and::set-frame-transfer-mode* 0))
+    (and::set-slowest-hs-speed)
+    (and::set-trigger-mode 'and::internal)
+    (and::check (and::set-temperature* -40))
+    (and::check (and::cooler-on*))
+    ;;(set-isolated-crop-mode* 0 *h* *w* 1 1)
     (and::set-image :xstart xstart :ystart ystart :xend xend :yend yend)
-    (setf and::*w* (1+ (- xend xstart))
-	  and::*h* (1+ (- yend ystart))))
-  
-  (and::get-acquisition-timings))
+    (setf and::*w* w
+	  and::*h* h)
+    (and::get-acquisition-timings)))
+
+(defmethod initialize-instance :after ((cam clara-camera) &rest args)
+  (with-slots (xstart xend ystart yend w h) cam
+     (setf w (1+ (- xend xstart))
+	   h (1+ (- yend ystart)))))
+
+(defmethod print-object ((cam clara-camera) stream)
+  (with-slots (exposure-time w h) cam
+   (format stream "<cam ~a>" (list exposure-time w h))))
+
+
+
+#+nil
+(make-instance 'clara-camera)
+
 
 (defpackage :webc
   (:use #:cl #:hunchentoot
@@ -87,55 +113,8 @@ hunchentoot::*easy-handler-alist*
   (setf (hunchentoot:content-type*) "text/plain")
   (format nil "Hey~@[ ~A~]!" name))
 
-(define-easy-handler (tutorial1 :uri "/tutorial1" :acceptor-names t) ()
-  (with-html-output-to-string (s)
-    (:html
-     (:head (:title "parenscript tutorial: exampl 1"))
-     (:body (:h1 "parenscript tut 1")
-	    "Pleas click link below." :br
-	    (:a :href "#" :onclick (ps (alert "hello world"))
-		"hello world")
-	    ))))
-(define-easy-handler (tutorial2 :uri "/tutorial2") ()
-  (with-html-output-to-string (s)
-    (:html
-     (:head
-      (:title "Parenscript tutorial: 2nd example")
-      (:script :type "text/javascript"
-               (str (ps
-                      (defun greeting-callback ()
-                        (alert "Hello World"))))))
-     (:body
-      (:h2 "Parenscript tutorial: 2nd example")
-      (:a :href "#" :onclick (ps (greeting-callback))
-          "Hello World")))))
-
 (define-easy-handler (ajax/bla :uri "/ajax/bla") ()
     (format nil "~d" (random 123)))
-
-
-(defun draw-mandelbrot (file pic-number)
-  (let* ((png (make-instance 'zpng:png
-                             :color-type :grayscale-alpha
-                             :width 64
-                             :height 64))
-         (image (zpng:data-array png))
-         (max 255))
-    (dotimes (y 64 (zpng:write-png png file))
-      (dotimes (x 64)
-	(let ((c (complex (- (/ x 16.0) 1.5 (* pic-number .1)) (- (/ y 16.0) 1.5)))
-              (z (complex 0.0 0.0))
-              (iteration 0))
-          (loop
-	     (setf z (+ (* z z) c))
-	     (incf iteration)
-	     (cond ((< 4 (abs z))
-		    (setf (aref image y x 1) iteration)
-		    (return))
-		   ((= iteration max)
-		    (setf (aref image y x 1) 255)
-		    (return)))))))))
-
 
 
 (progn
@@ -146,7 +125,15 @@ hunchentoot::*easy-handler-alist*
 		     :configuration 1
 		     ;;:endpoint #x83 ; 2 #x81 #x83qu
 		     :interface 0))
+    #+nil
     (libusb0::prepare-zeiss *zeiss-connection*))
+#+nil
+(defparameter *zeiss-connection* nil)
+
+#+nil
+(libusb0::prepare-zeiss *zeiss-connection*)
+#+nil
+(libusb0::close-connection *zeiss-connection*)
 
 
 (defmethod zeiss-mcu-read-position ((con libusb0::usb-connection))
@@ -187,19 +174,6 @@ hunchentoot::*easy-handler-alist*
 			:initial-contents (map 'list #'char-code str))))
     (libusb0::bulk-write con a :endpoint 2)))
 
-#+NIL
-(time 
- (draw-mandelbrot "/dev/shm/o.png"))
-
-(define-easy-handler (mma :uri "/mma") (pic-number)
-  (setf (hunchentoot:content-type*) "image/png")
-  (let ((fn (make-pathname :name "mma" :type "png" :version nil)))
-    (draw-mandelbrot fn (read-from-string pic-number))
-    (with-open-file (in fn :element-type '(unsigned-byte 8))
-      (let ((image-data (make-array (file-length in)
-				    :element-type 'flex:octet)))
-	(read-sequence image-data in)
-	image-data))))
 
 (progn
  (defun draw-circle (file w h)
@@ -247,7 +221,7 @@ hunchentoot::*easy-handler-alist*
 	   (setf (aref image y x 0)
 		 (if *clara-image*
 		     (min 255 (max 0 
-				   (floor (- (aref ci1 (+ x (* w y))) mi) (- ma mi))))
+				   (floor (- (aref ci1 (+ x (* w y))) mi) (/ (- ma mi) 255s0))))
 		     128))))
        (with-open-file (in fn :element-type '(unsigned-byte 8))
 	(let ((image-data (make-array (file-length in)
@@ -291,11 +265,12 @@ hunchentoot::*easy-handler-alist*
 					     (:option :value "3" "3")))
 			      #+nil (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
 			      #+nil (:li (:div :id "value2"))
-			       (:li (loop for (coord val) in
-					 (zeiss-mcu-read-position *zeiss-connection*) do
-					 (htm (:div (str coord) (:input :id coord
-								  :type "text" :maxlength "5"
-								  :value val)))))
+			       (:li (when *zeiss-connection*
+				      (loop for (coord val) in
+					   (zeiss-mcu-read-position *zeiss-connection*) do
+					  (htm (:div (str coord) (:input :id coord
+									 :type "text" :maxlength "5"
+									 :value val))))))
 			      #+nil (:li (:div :id "slider"))
 			      #+nil (:li (:table
 				     (loop for j below 3 do
