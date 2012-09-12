@@ -1,17 +1,28 @@
-(eval-when (:execute :load-toplevel :compile-toplevel)
+(eval-when (:compile-toplevel)
  (ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng))
- (load "../cl-pl2303/libusb0.lisp"))
-
-(setf asdf:*central-registry* 
-      #+(and win32 x86-64) '("C:/Users/martin/stage/sb-andor2-win/")
-      #+linux '("~/stage/sb-andor2-win/"))
-
-(require :sb-andor2-win)
+ (load "../cl-pl2303/libusb0.lisp")
+ (setf asdf:*central-registry* 
+       #+(and win32 x86-64) '("C:/Users/martin/stage/sb-andor2-win/")
+       #+linux '("~/stage/sb-andor2-win/"))
+ (require :sb-andor2-win))
 
 #+nil
-(and::initialize)
+(time
+ (progn ;; initialize camera
+   (and::initialize)
+   (defparameter *clara-parameters* (make-instance 'clara-camera
+						   :accumulations 1))
+   (clara-set-parameters *clara-parameters*)))
+
+
+#+nil
+(and::get-status)
 
 (defun clara-capture-image ()
+  (when (multiple-value-bind (err stat) (and::get-status*)
+	  (eq 'sb-andor2-win-internal::DRV_NOT_INITIALIZED
+	      (and::lookup-error err)))
+    (return-from clara-capture-image))
   (when (eq (and::get-status)
 	    'SB-ANDOR2-WIN-INTERNAL::DRV_IDLE)
    (progn
@@ -19,6 +30,7 @@
      (and::wait-for-acquisition*)
      (multiple-value-bind (a b c)
 	 (and::get-acquisition-timings)
+      (declare (ignore a bn))
        (sleep c))
      (and::get-most-recent-image))))
 #+nil
@@ -77,6 +89,7 @@
     (and::get-acquisition-timings)))
 
 (defmethod initialize-instance :after ((cam clara-camera) &rest args)
+  (declare (ignore args))
   (with-slots (xstart xend ystart yend w h) cam
      (setf w (1+ (- xend xstart))
 	   h (1+ (- yend ystart)))))
@@ -120,15 +133,17 @@ hunchentoot::*easy-handler-alist*
     (format nil "~d" (random 123)))
 
 
-(progn
-    (defvar *zeiss-connection*
+(defvar *zeiss-connection* nil)
+#+nil
+(progn ;; open usb serial converter
+    (defparameter *zeiss-connection*
       (make-instance 'libusb0::usb-connection
 		     :vendor-id #x067b
 		     :product-id #x2303
 		     :configuration 1
 		     ;;:endpoint #x83 ; 2 #x81 #x83qu
 		     :interface 0))
-    #+nil
+    
     (libusb0::prepare-zeiss *zeiss-connection*))
 #+nil
 (defparameter *zeiss-connection* nil)
@@ -206,9 +221,11 @@ hunchentoot::*easy-handler-alist*
 (defvar *clara-image* nil)
 
 (define-easy-handler (clara-image :uri "/clara-image") (time)
-   (setf (hunchentoot:content-type*) "image/png")
-   (defparameter *clara-image* (clara-capture-image))
-   (destructuring-bind (w h) (array-dimensions *clara-image*)
+  (declare (ignore time))
+  (setf (hunchentoot:content-type*) "image/png")
+  (defparameter *clara-image* (clara-capture-image))
+  (if *clara-image*
+    (destructuring-bind (w h) (array-dimensions *clara-image*)
      (let* ((png (make-instance 'zpng:png
 				:color-type :grayscale
 				:width w
@@ -227,12 +244,13 @@ hunchentoot::*easy-handler-alist*
 				   (floor (- (aref ci1 (+ x (* w y))) mi) (/ (- ma mi) 255s0))))
 		     128))))
        (with-open-file (in fn :element-type '(unsigned-byte 8))
-	(let ((image-data (make-array (file-length in)
-				      :element-type '(unsigned-byte 8))))
-	  (read-sequence image-data in)
-	  image-data)))))
+	 (let ((image-data (make-array (file-length in)
+				       :element-type '(unsigned-byte 8))))
+	   (read-sequence image-data in)
+	   image-data))))
+    "no image available"))
 
-(defvar *clara-parameters* (make-instance 'clara-camera))
+(defvar *clara-parameters* nil)
 
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
@@ -256,46 +274,60 @@ hunchentoot::*easy-handler-alist*
 		    (:div :id "tab-mma"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-focus"
-			  (:button :id "capture-button" "capture")
-			  (:img :id "clara-image" :src "/clara-image")
+			  (:table (:tr
+				   (:td (if *clara-parameters*
+					    (htm (:img :id "clara-image" :src "/clara-image"
+						       :width (w *clara-parameters*)
+						       :height (h *clara-parameters*)))
+					    (htm "camera not initialized")))
+				   (:td (:p (:button :id "capture-button" "capture") (:button :id "clara-start" "start") (:button :id "clara-stop" "stop"))
+					(when *clara-parameters*
+					  (with-slots (exposure-time xstart xend ystart yend accumulations) *clara-parameters*
+					    (htm (:form :id "clara-form"
+							(:p "exposure" (:input :id "exposure-time" :value exposure-time 
+									       :maxlength "6" :size "6"))
+							(:p "accumulations" (:input :id "accumulations" :value accumulations 
+										    :maxlength "4" :size "4"))
+							(:p "cam x"
+							    (:input :id "xstart" :value xstart :maxlength "4" :size "4")
+							    (:input :id "xend" :value xend :maxlength "4" :size "4"))
+							(:p "cam y"
+							    (:input :id "ystart" :value ystart :maxlength "4" :size "4")
+							    (:input :id "yend" :value yend :maxlength "4" :size "4"))
+							(:div :id "clara-timings")
+							(when *zeiss-connection*
+							  (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) do
+							       (htm (:div (str coord) (:input :id coord
+											      :type "text" 
+											      :value val
+											      :maxlength "4" :size "4"))))))))))))
+		       
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
 				(:div :id "draggable" :class "ui-widget-content"
 				      (:p :class "ui-widget-content" "region of interest")))
-			  (:ul
-			       #+nil(:li (:select :id "selector"
+			  
+			  #+nil(:li (:select :id "selector"
 					     (:option :value "1" "1")
 					     (:option :value "2" "2")
 					     (:option :value "3" "3")))
-			      #+nil (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
-			      #+nil (:li (:div :id "value2"))
-			       (:li (when *zeiss-connection*
-				      (loop for (coord val) in
-					   (zeiss-mcu-read-position *zeiss-connection*) do
-					  (htm (:div (str coord) (:input :id coord
-									 :type "text" :maxlength "5"
-									 :value val))))))
-			      #+nil (:li (:div :id "slider"))
-			      #+nil (:li (:table
-				     (loop for j below 3 do
-					  (htm 
-					   (:tr (loop for i below 3 do
-						     (htm
-						      (:td (:image 
-							    :src
-							    (format nil "/mma?pic-number=~d" 
-								    (+ j (* 3 i))))))))))))))
+			  #+nil (:li (:input :id "value" :name "value" :type "text" :size "10" :maxlength "10"))
+			  #+nil (:li (:div :id "value2"))
+			  
+			  #+nil (:li (:div :id "slider"))
+			  #+nil (:li (:table
+				      (loop for j below 3 do
+					   (htm 
+					    (:tr (loop for i below 3 do
+						      (htm
+						       (:td (:image 
+							     :src
+							     (format nil "/mma?pic-number=~d" 
+								     (+ j (* 3 i)))))))))))))
 		    (:div :id "tab-lcos"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-cam"
-			  (:p (:button :id "clara-start" "start") (:button :id "clara-stop" "stop"))
-			  (with-slots (exposure-time xstart xend ystart yend accumulations) *clara-parameters*
-			    (htm (:form :id "clara-form"
-					(:p "exposure" (:input :id "exposure-time" :value exposure-time))
-					(:p "accumulations" (:input :id "accumulations" :value accumulations))
-					(:p "x" (:input :id "xstart" :value xstart) (:input :id "xend" :value xend))
-					(:p "y" (:input :id "ystart" :value ystart) (:input :id "yend" :value yend))
-					(:div :id "clara-timings"))))))
+			  ))
 	      
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/jquery-1.8.1.min.js")
@@ -397,7 +429,8 @@ hunchentoot::*easy-handler-alist*
 
 (hunchentoot:define-easy-handler (x-motor-controller :uri "/ajax/x-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
-  (zeiss-mcu-write-position-x *zeiss-connection* (read-from-string value))
+  (when *zeiss-connection*
+    (zeiss-mcu-write-position-x *zeiss-connection* (read-from-string value)))
   value)
 
 
@@ -415,7 +448,8 @@ hunchentoot::*easy-handler-alist*
 
 (hunchentoot:define-easy-handler (y-motor-controller :uri "/ajax/y-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
-  (zeiss-mcu-write-position-y *zeiss-connection* (read-from-string value))
+  (when *zeiss-connection*
+    (zeiss-mcu-write-position-y *zeiss-connection* (read-from-string value)))
   value)
 (hunchentoot:define-easy-handler (z-motor-controller :uri "/ajax/z-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
