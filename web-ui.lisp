@@ -44,12 +44,15 @@
    (accumulations :accessor accumulations :initform 10 :initarg :accumulations)
    ))
 
+#+nil
+(clara-set-parameters (make-instance 'clara-camera :accumulations 1))
+
 (defmethod clara-set-parameters ((camera clara-camera))
   (with-slots
 	(xstart xend ystart yend w h exposure-time cycle-time accumulations)
       camera
     (and::set-acquisition-mode 'and::kinetics)
-    (and::set-exposure-time exp-time-s)
+    (and::set-exposure-time exposure-time)
     (and::check (and::set-number-accumulations* accumulations))
     ;; (check (set-accumulation-cycle-time* .2))
     (and::check (and::set-kinetic-cycle-time* cycle-time))
@@ -229,6 +232,7 @@ hunchentoot::*easy-handler-alist*
 	  (read-sequence image-data in)
 	  image-data)))))
 
+(defvar *clara-parameters* (make-instance 'clara-camera))
 
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
@@ -284,7 +288,14 @@ hunchentoot::*easy-handler-alist*
 		    (:div :id "tab-lcos"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-cam"
-			  "second tab"))
+			  (:p (:button :id "clara-start" "start") (:button :id "clara-stop" "stop"))
+			  (with-slots (exposure-time xstart xend ystart yend accumulations) *clara-parameters*
+			    (htm (:form :id "clara-form"
+					(:p "exposure" (:input :id "exposure-time" :value exposure-time))
+					(:p "accumulations" (:input :id "accumulations" :value accumulations))
+					(:p "x" (:input :id "xstart" :value xstart) (:input :id "xend" :value xend))
+					(:p "y" (:input :id "ystart" :value ystart) (:input :id "yend" :value yend))
+					(:div :id "clara-timings"))))))
 	      
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/jquery-1.8.1.min.js")
@@ -298,6 +309,26 @@ hunchentoot::*easy-handler-alist*
 	       (str (ps ($ (lambda () 
 			     ((chain ($ "#tabs") tabs))
 			     ((chain ($ "#capture-button") button))
+			     
+
+			     
+			     ((chain ($ "#clara-start") button))
+			     ((chain ($ "#clara-stop") button))
+			     
+
+			     (chain ($ "#clara-form") (change (lambda ()
+								((@ $ get) 
+								 (concatenate 'string
+									      "/ajax/camera-settings"
+									      "?exposure-time=" (encode-u-r-i-component (chain ($ "#exposure-time") (val)))
+									      "&xstart=" (encode-u-r-i-component (chain ($ "#xstart") (val)))
+									      "&xend=" (encode-u-r-i-component (chain ($ "#xend") (val)))
+									      "&ystart=" (encode-u-r-i-component (chain ($ "#ystart") (val)))
+									      "&yend=" (encode-u-r-i-component (chain ($ "#yend") (val)))
+									      "&accumulations=" (encode-u-r-i-component (chain ($ "#accumulations") (val))))
+								 (lambda (r) 
+								   (chain ($ "#clara-timings") (html r)))))))
+			     
 			     (chain ($ "#capture-button") (click (lambda ()
 								   (chain ($ "#clara-image") (attr "src" 
 												  (concatenate 'string "/clara-image?"
@@ -368,6 +399,20 @@ hunchentoot::*easy-handler-alist*
   (setf (hunchentoot:content-type*) "text/plain")
   (zeiss-mcu-write-position-x *zeiss-connection* (read-from-string value))
   value)
+
+
+(hunchentoot:define-easy-handler (camera-settings :uri "/ajax/camera-settings") 
+    (exposure-time xstart xend ystart yend accumulations)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (setf *clara-parameters* (make-instance 'clara-camera
+					  :exposure-time (read-from-string exposure-time)
+					  :xstart (read-from-string xstart)
+					  :xend (read-from-string xend)
+					  :ystart (read-from-string ystart)
+					  :yend (read-from-string yend)
+					  :accumulations (read-from-string accumulations)))
+  (format nil "~a" (multiple-value-list (clara-set-parameters *clara-parameters*))))
+
 (hunchentoot:define-easy-handler (y-motor-controller :uri "/ajax/y-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
   (zeiss-mcu-write-position-y *zeiss-connection* (read-from-string value))
