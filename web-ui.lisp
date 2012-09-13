@@ -1,14 +1,18 @@
+(declaim #+sbcl(sb-ext:muffle-conditions style-warning))
 (eval-when (:compile-toplevel)
  (ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng))
  (load "../cl-pl2303/libusb0.lisp")
+ (load "../mma-reverse/net-control.lisp")
  (setf asdf:*central-registry* 
-       #+(and win32 x86-64) '("c:/Users/martin/stage/sb-libusb0/"  
+       #+(and win32 x86-64) '(
 			      "C:/Users/martin/stage/sb-andor2-win/")
        #+linux '("~/stage/sb-andor2-win/"))
  (require :sb-andor2-win))
 
-
-
+#+nil
+(c::mma-connect)
+#+nil
+(c::mma-init)
 #+nil
 (time
  (progn ;; initialize camera
