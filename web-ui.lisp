@@ -2,9 +2,12 @@
  (ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng))
  (load "../cl-pl2303/libusb0.lisp")
  (setf asdf:*central-registry* 
-       #+(and win32 x86-64) '("C:/Users/martin/stage/sb-andor2-win/")
+       #+(and win32 x86-64) '("c:/Users/martin/stage/sb-libusb0/"  
+			      "C:/Users/martin/stage/sb-andor2-win/")
        #+linux '("~/stage/sb-andor2-win/"))
  (require :sb-andor2-win))
+
+
 
 #+nil
 (time
@@ -141,9 +144,8 @@ hunchentoot::*easy-handler-alist*
 		     :vendor-id #x067b
 		     :product-id #x2303
 		     :configuration 1
-		     ;;:endpoint #x83 ; 2 #x81 #x83qu
 		     :interface 0))
-    
+    #+nil
     (libusb0::prepare-zeiss *zeiss-connection*))
 #+nil
 (defparameter *zeiss-connection* nil)
@@ -300,7 +302,11 @@ hunchentoot::*easy-handler-alist*
 							       (htm (:div (str coord) (:input :id coord
 											      :type "text" 
 											      :value val
-											      :maxlength "4" :size "4"))))))))))))
+											      :maxlength "4" :size "4")))))
+							(:p "lcos pic" (:input :id "forthdd-picnumber"
+									       :type "text" 
+									       :value 108
+									       :maxlength "4" :size "4")))))))))
 		       
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
@@ -400,6 +406,17 @@ hunchentoot::*easy-handler-alist*
 					(lambda (r) ;; replace value with response
 					  (chain ($ "#Z") (val r)))))))
 			     
+			     (chain ($ "#forthdd-picnumber")
+				    (change
+				     (lambda ()
+				       ((@ $ get) 
+					(concatenate 'string
+						     "/ajax/forthdd-settings"
+						     "?pic-number=" ;; send value to server
+						     (encode-u-r-i-component
+						      (chain ($ "#forthdd-picnumber") (val))))
+					(lambda (r))))))
+			     
 			     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
 			     #+nil (chain ($ "#draggable") (resizable (create
 								       containment "#camera-chip"
@@ -426,6 +443,15 @@ hunchentoot::*easy-handler-alist*
 (hunchentoot:define-easy-handler (process-slider :uri "/ajax/process-slider") (slider-value)
   (setf (hunchentoot:content-type*) "text/plain")
   (format nil "Hey~@[ ~A~]!" slider-value))
+
+(hunchentoot:define-easy-handler (forthdd-settings :uri "/ajax/forthdd-settings") 
+    (pic-number)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (progn ;; switch image/running order
+    (when libusb0::*forthdd*
+      (libusb0::forthdd-talk libusb0::*forthdd* #x23 
+		    (list (read-from-string pic-number)))))
+  "")
 
 (hunchentoot:define-easy-handler (x-motor-controller :uri "/ajax/x-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
