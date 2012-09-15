@@ -295,6 +295,8 @@
 					    (htm (:form :id "clara-form"
 							(:p (:input :type "checkbox" :id "slow-readout" :checked "checked")
 							    (:label :from "slow-readout" "slow readout"))
+							(:p (:input :type "checkbox" :id "capture-when-change" :checked "checked")
+							    (:label :from "capture-when-change" "capture when change"))
 							(:p "exposure" (:input :id "exposure-time" :value exposure-time 
 									       :maxlength "6" :size "6"))
 							(:p "accumulations" (:input :id "accumulations" :value accumulations 
@@ -305,13 +307,14 @@
 							(:p "cam y"
 							    (:input :id "ystart" :value ystart :maxlength "4" :size "4")
 							    (:input :id "yend" :value yend :maxlength "4" :size "4"))
-							(:div :id "clara-timings")
+							(:div :id "clara-timings" "()")
 							(when *zeiss-connection*
 							  (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) do
-							       (htm (:div (str coord) (:input :id coord
-											      :type "text" 
-											      :value val
-											      :maxlength "4" :size "4")))))
+							       (htm (:div (:input :id coord
+										  :type "text" 
+										  :value val
+										  :maxlength "4" :size "4")
+									  (:label :from coord (str coord))))))
 							(:p "lcos pic" (:input :id "forthdd-picnumber"
 									       :type "text" 
 									       :value 108
@@ -376,7 +379,10 @@
 									      "&slow-readout=" (encode-u-r-i-component (chain ($ "#slow-readout") (attr "checked")))
 									      )
 								 (lambda (r) 
-								   (chain ($ "#clara-timings") (html r)))))))
+								   (chain ($ "#clara-timings") (html r))
+								   (when (string= "checked"
+										  (chain ($ "#capture-when-change") (attr "checked")))
+								     (chain ($ "#capture-button") (click))))))))
 			    
 		     
 			     (chain ($ "#capture-button") (click (lambda ()
