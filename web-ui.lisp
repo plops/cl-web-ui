@@ -311,8 +311,9 @@
 							(when *zeiss-connection*
 							  (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) do
 							       (htm (:div (:input :id coord
-										  :type "text" 
+										  :type "number" 
 										  :value val
+										  :step 10
 										  :maxlength "4" :size "4")
 									  (:label :from coord (str coord))))))
 							(:p "lcos pic" (:input :id "forthdd-picnumber"
@@ -471,11 +472,7 @@
 		    (list (read-from-string pic-number)))))
   "")
 
-(hunchentoot:define-easy-handler (x-motor-controller :uri "/ajax/x-motor-controller") (value)
-  (setf (hunchentoot:content-type*) "text/plain")
-  (when *zeiss-connection*
-    (zeiss-mcu-write-position-x *zeiss-connection* (read-from-string value)))
-  value)
+
 
 
 (hunchentoot:define-easy-handler (camera-settings :uri "/ajax/camera-settings") 
@@ -491,6 +488,12 @@
 					  :slow-readout (when (string= "checked" slow-readout)
 							  t)))
   (format nil "~a" (multiple-value-list (clara-set-parameters *clara-parameters*))))
+
+(hunchentoot:define-easy-handler (x-motor-controller :uri "/ajax/x-motor-controller") (value)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (when *zeiss-connection*
+    (zeiss-mcu-write-position-x *zeiss-connection* (read-from-string value)))
+  value)
 
 (hunchentoot:define-easy-handler (y-motor-controller :uri "/ajax/y-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
