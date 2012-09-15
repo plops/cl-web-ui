@@ -10,9 +10,20 @@
  (require :sb-andor2-win))
 
 #+nil
+(progn
+ (defparameter libusb0::*forthdd*
+   (make-instance 'libusb0::usb-connection
+		  :vendor-id #x19ec
+		  :product-id #x0300
+		  :configuration 1
+		  :interface 0)))
+
+#+nil
 (c::mma-connect)
 #+nil
 (c::mma-init)
+#+nil
+(c::upload-disk-image :radius .3)
 #+nil
 (time
  (progn ;; initialize camera
@@ -20,7 +31,6 @@
    (defparameter *clara-parameters* (make-instance 'clara-camera
 						   :accumulations 1))
    (clara-set-parameters *clara-parameters*)))
-
 
 #+nil
 (and::get-status)
@@ -61,6 +71,7 @@
 		  :initarg :exposure-time)
    (cycle-time :accessor cycle-time :initform .045f0 :initarg :cycle-time)
    (accumulations :accessor accumulations :initform 10 :initarg :accumulations)
+   (slow-readout :accessor slow-readout :initform t :initarg :slow-readout)
    ))
 
 #+nil
@@ -68,7 +79,7 @@
 
 (defmethod clara-set-parameters ((camera clara-camera))
   (with-slots
-	(xstart xend ystart yend w h exposure-time cycle-time accumulations)
+	(xstart xend ystart yend w h exposure-time cycle-time accumulations slow-readout)
       camera
     (and::set-acquisition-mode 'and::kinetics)
     (and::set-exposure-time exposure-time)
@@ -85,7 +96,9 @@
 				   2 ;; opening time in ms
 				   )) 
     (and::check (and::set-frame-transfer-mode* 0))
-    (and::set-slowest-hs-speed)
+    (if slow-readout 
+	(and::set-slowest-hs-speed)
+	(and::set-fastest-hs-speed))
     (and::set-trigger-mode 'and::internal)
     (and::check (and::set-temperature* -40))
     (and::check (and::cooler-on*))
@@ -129,16 +142,6 @@
 		       :message-log-destination *standard-output*)))
 #+nil
 *dispatch-table*
-#+nil
-hunchentoot::*easy-handler-alist*
-
-(hunchentoot:define-easy-handler (say-yo :uri "/yo") (name)
-  (setf (hunchentoot:content-type*) "text/plain")
-  (format nil "Hey~@[ ~A~]!" name))
-
-(define-easy-handler (ajax/bla :uri "/ajax/bla") ()
-    (format nil "~d" (random 123)))
-
 
 (defvar *zeiss-connection* nil)
 #+nil
@@ -149,7 +152,6 @@ hunchentoot::*easy-handler-alist*
 		     :product-id #x2303
 		     :configuration 1
 		     :interface 0))
-    #+nil
     (libusb0::prepare-zeiss *zeiss-connection*))
 #+nil
 (defparameter *zeiss-connection* nil)
@@ -288,8 +290,11 @@ hunchentoot::*easy-handler-alist*
 					    (htm "camera not initialized")))
 				   (:td (:p (:button :id "capture-button" "capture") (:button :id "clara-start" "start") (:button :id "clara-stop" "stop"))
 					(when *clara-parameters*
+					  
 					  (with-slots (exposure-time xstart xend ystart yend accumulations) *clara-parameters*
 					    (htm (:form :id "clara-form"
+							(:p (:input :type "checkbox" :id "slow-readout" :checked "checked")
+							    (:label :from "slow-readout" "slow readout"))
 							(:p "exposure" (:input :id "exposure-time" :value exposure-time 
 									       :maxlength "6" :size "6"))
 							(:p "accumulations" (:input :id "accumulations" :value accumulations 
@@ -351,7 +356,7 @@ hunchentoot::*easy-handler-alist*
 	       (str (ps ($ (lambda () 
 			     ((chain ($ "#tabs") tabs))
 			     ((chain ($ "#capture-button") button))
-			     
+
 
 			     
 			     ((chain ($ "#clara-start") button))
@@ -367,10 +372,13 @@ hunchentoot::*easy-handler-alist*
 									      "&xend=" (encode-u-r-i-component (chain ($ "#xend") (val)))
 									      "&ystart=" (encode-u-r-i-component (chain ($ "#ystart") (val)))
 									      "&yend=" (encode-u-r-i-component (chain ($ "#yend") (val)))
-									      "&accumulations=" (encode-u-r-i-component (chain ($ "#accumulations") (val))))
+									      "&accumulations=" (encode-u-r-i-component (chain ($ "#accumulations") (val)))
+									      "&slow-readout=" (encode-u-r-i-component (chain ($ "#slow-readout") (attr "checked")))
+									      )
 								 (lambda (r) 
 								   (chain ($ "#clara-timings") (html r)))))))
-			     
+			    
+		     
 			     (chain ($ "#capture-button") (click (lambda ()
 								   (chain ($ "#clara-image") (attr "src" 
 												  (concatenate 'string "/clara-image?"
@@ -465,7 +473,7 @@ hunchentoot::*easy-handler-alist*
 
 
 (hunchentoot:define-easy-handler (camera-settings :uri "/ajax/camera-settings") 
-    (exposure-time xstart xend ystart yend accumulations)
+    (exposure-time xstart xend ystart yend accumulations slow-readout)
   (setf (hunchentoot:content-type*) "text/plain")
   (setf *clara-parameters* (make-instance 'clara-camera
 					  :exposure-time (read-from-string exposure-time)
@@ -473,7 +481,9 @@ hunchentoot::*easy-handler-alist*
 					  :xend (read-from-string xend)
 					  :ystart (read-from-string ystart)
 					  :yend (read-from-string yend)
-					  :accumulations (read-from-string accumulations)))
+					  :accumulations (read-from-string accumulations)
+					  :slow-readout (when (string= "checked" slow-readout)
+							  t)))
   (format nil "~a" (multiple-value-list (clara-set-parameters *clara-parameters*))))
 
 (hunchentoot:define-easy-handler (y-motor-controller :uri "/ajax/y-motor-controller") (value)
