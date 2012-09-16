@@ -629,12 +629,18 @@
   (setf (hunchentoot:content-type*) "text/plain")
   (format nil "Hey~@[ ~A~]!" slider-value))
 
-(hunchentoot:define-easy-handler (forthdd-settings :uri "/ajax/mma-disk")    (radius)
-  (setf (hunchentoot:content-type*) "text/plain")
+(hunchentoot:define-easy-handler (mma-disk :uri "/ajax/mma-disk") (radius)
+  (setf (hunchentoot:content-type*) "image/png")
   (progn ;; change mma image
-    (when c::*tcp*
-      (c::upload-disk-image :radius (read-from-string radius))))
-  "")
+    (if c::*tcp*
+	(progn (c::upload-disk-image :radius (read-from-string radius))
+	       (with-open-file (in "c:/Users/martin/stage/cl-web-ui/mma/0000.png"
+				   :element-type '(unsigned-byte 8))
+		 (let ((image-data (make-array (file-length in)
+					       :element-type '(unsigned-byte 8))))
+		   (read-sequence image-data in)
+		   image-data)))
+	"")))
 
 
 (hunchentoot:define-easy-handler (forthdd-settings :uri "/ajax/forthdd-settings") 
