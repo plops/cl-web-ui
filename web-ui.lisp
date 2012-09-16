@@ -8,7 +8,6 @@
 			      "C:/Users/martin/stage/sb-andor2-win/")
        #+linux '("~/stage/sb-andor2-win/"))
  (require :sb-andor2-win))
-
 #+nil
 (progn
  (defparameter libusb0::*forthdd*
@@ -24,6 +23,9 @@
 (c::mma-init)
 #+nil
 (c::upload-disk-image :radius .3)
+#+nil
+(c::with-tcp c::*tcp* (c::status))
+
 #+nil
 (time
  (progn ;; initialize camera
@@ -141,8 +143,12 @@
 		       :access-log-destination *standard-output*
 		       :message-log-destination *standard-output*)))
 #+nil
+(stop *acceptor*)
+#+nil
 *dispatch-table*
 
+#+nil
+(defparameter *zeiss-connection* nil)
 (defvar *zeiss-connection* nil)
 #+nil
 (progn ;; open usb serial converter
@@ -153,8 +159,8 @@
 		     :configuration 1
 		     :interface 0))
     (libusb0::prepare-zeiss *zeiss-connection*))
-#+nil
-(defparameter *zeiss-connection* nil)
+
+
 
 #+nil
 (libusb0::prepare-zeiss *zeiss-connection*)
@@ -184,6 +190,7 @@
 	 (a (make-array (length str)
 			:element-type '(unsigned-byte 8)
 			:initial-contents (map 'list #'char-code str))))
+    (format t "mcu: ~a~%" pos)
     (libusb0::bulk-write con a :endpoint 2)))
 
 (defmethod zeiss-mcu-write-position-y ((con libusb0::usb-connection) pos)
@@ -191,6 +198,7 @@
 	 (a (make-array (length str)
 			:element-type '(unsigned-byte 8)
 			:initial-contents (map 'list #'char-code str))))
+    (format t "mcu: ~a~%" pos)
     (libusb0::bulk-write con a :endpoint 2)))
 
 (defmethod zeiss-mcu-write-position-z ((con libusb0::usb-connection) pos)
@@ -198,6 +206,7 @@
 	 (a (make-array (length str)
 			:element-type '(unsigned-byte 8)
 			:initial-contents (map 'list #'char-code str))))
+    (format t "mcu: ~a~%" pos)
     (libusb0::bulk-write con a :endpoint 2)))
 
 
@@ -240,21 +249,29 @@
 				:height h))
 	    (image (zpng:data-array png))
 	    (fn (make-pathname :name "clara-image" :type "png" :version nil))
-	    (ci1 (when *clara-image* 
-		   (sb-ext:array-storage-vector *clara-image*)))
-	    (ma (reduce #'max ci1))
-	    (mi (reduce #'min ci1)))
+	    (ci1 (sb-ext:array-storage-vector *clara-image*))
+	    (mi (reduce #'min ci1))
+	    (gamma (let* ((n (length ci1))
+			  (a (make-array n
+					 :element-type 'single-float)))
+		     (dotimes (i n)
+		       (setf (aref a i) (expt (+ (aref ci1 i) .01 (- mi))
+					      .3s0)))
+		     a))
+	    (ma2 (reduce #'max gamma))
+	    (mi2 (reduce #'min gamma)))
        (dotimes (y h (zpng:write-png png fn))
 	 (dotimes (x w)
 	   (setf (aref image y x 0)
 		 (if *clara-image*
 		     (min 255 (max 0 
-				   (floor (- (aref ci1 (+ x (* w y))) mi) (/ (- ma mi) 255s0))))
+				   (floor (- (aref gamma (+ x (* w y))) mi2)
+					  (/ (- ma2 mi2) 256s0))))
 		     128))))
        (with-open-file (in fn :element-type '(unsigned-byte 8))
 	 (let ((image-data (make-array (file-length in)
 				       :element-type '(unsigned-byte 8))))
-	   (read-sequence image-data in)
+	   (read-sequence image-data in) 
 	   image-data))))
     "no image available"))
 
@@ -275,14 +292,18 @@
 	      )
 	     (:body 
 	      (:div :id "tabs"
-		    (:ul (:li (:a :href "#tab-focus" "focus"))
+		    #+nil(:ul (:li (:a :href "#tab-focus" "focus"))
 			 (:li (:a :href "#tab-mma" "mma"))
 			 (:li (:a :href "#tab-lcos" "lcos"))
 			 (:li (:a :href "#tab-cam" "camera")))
-		    (:div :id "tab-mma"
+		    #+nil(:div :id "tab-mma"
 			  "This is the content panel linked to the first tab.")
 		    (:div :id "tab-focus"
-			  (:table (:tr
+			  (:table 
+			   (:tr (:td
+				 (:canvas :width 320 :height 100 :id "histogram-canvas"))
+				(:td "settings"))
+			   (:tr
 				   (:td (if *clara-parameters*
 					    (htm (:img :id "clara-image" :src "/clara-image"
 						       :width (w *clara-parameters*)
@@ -308,18 +329,20 @@
 							    (:input :id "ystart" :value ystart :maxlength "4" :size "4")
 							    (:input :id "yend" :value yend :maxlength "4" :size "4"))
 							(:div :id "clara-timings" "()")
-							(when *zeiss-connection*
-							  (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) do
-							       (htm (:div (:input :id coord
-										  :type "number" 
-										  :value val
-										  :step 10
-										  :maxlength "4" :size "4")
-									  (:label :from coord (str coord))))))
+							 (when *zeiss-connection*
+							   (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) do
+								(htm (:div (:input :id coord
+										   :type "number" 
+										   :value val
+										   :step 10
+										   :maxlength "4" :size "4")
+									   (:label :from coord (str coord))))))
 							(:p "lcos pic" (:input :id "forthdd-picnumber"
-									       :type "text" 
+									       :type "number" 
 									       :value 108
-									       :maxlength "4" :size "4")))))))))
+									       :step 1
+									       :maxlength "4" :size "4")))
+						))))))
 		       
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
@@ -343,9 +366,9 @@
 							     :src
 							     (format nil "/mma?pic-number=~d" 
 								     (+ j (* 3 i)))))))))))))
-		    (:div :id "tab-lcos"
+		  #+nil  (:div :id "tab-lcos"
 			  "This is the content panel linked to the first tab.")
-		    (:div :id "tab-cam"
+		   #+nil (:div :id "tab-cam"
 			  ))
 	      
 	      (:script :type "text/javascript"
@@ -358,10 +381,17 @@
 	       :type "text/javascript"
 	       
 	       (str (ps ($ (lambda () 
-			     ((chain ($ "#tabs") tabs))
+			     #+nil((chain ($ "#tabs") tabs))
 			     ((chain ($ "#capture-button") button))
 
-
+			     (let ((c (chain ($ "#histogram-canvas") (get 0) (get-context "2d"))))
+			       (chain c (begin-path))
+			       (chain c (move-to 0 0))
+			       (chain c (line-to 320 0))
+			       (chain c (line-to 320 100))
+			       (chain c (line-to 0 100))
+			       (chain c (line-to 0 0))
+			       (chain c (stroke)))
 			     
 			     ((chain ($ "#clara-start") button))
 			     ((chain ($ "#clara-stop") button))
@@ -423,7 +453,9 @@
 						     (encode-u-r-i-component
 						      (chain ($ "#Z") (val))))
 					(lambda (r) ;; replace value with response
-					  (chain ($ "#Z") (val r)))))))
+					  (set-timeout
+					   (chain ($ "#Z") (val r))
+					   1000))))))
 			     
 			     (chain ($ "#forthdd-picnumber")
 				    (change
