@@ -17,6 +17,8 @@
 		  :product-id #x0300
 		  :configuration 1
 		  :interface 0)))
+#+nil
+(libusb0::close-connection libusb0::*forthdd*)
 
 #+nil
 (c::mma-connect)
@@ -38,29 +40,32 @@
 #+nil
 (and::get-status)
 
+(defvar *clara-image* nil)
 (defun clara-capture-image ()
   (when (multiple-value-bind (err stat) (and::get-status*)
 	  (eq 'sb-andor2-win-internal::DRV_NOT_INITIALIZED
 	      (and::lookup-error err)))
     (return-from clara-capture-image))
-  (when (eq (and::get-status)
-	    'SB-ANDOR2-WIN-INTERNAL::DRV_IDLE)
-   (progn
-     (and::start-acquisition)
-     (and::wait-for-acquisition*)
-     (multiple-value-bind (a b c)
-	 (and::get-acquisition-timings)
-      (declare (ignore a bn))
-       (sleep c))
-     (and::get-most-recent-image))))
+  (if (eq (and::get-status)
+	  'SB-ANDOR2-WIN-INTERNAL::DRV_IDLE)
+      (progn
+	(and::start-acquisition)
+	(and::wait-for-acquisition*)
+	(multiple-value-bind (a b c)
+	    (and::get-acquisition-timings)
+	  (declare (ignore a bn))
+	  (sleep c))
+	(and::get-most-recent-image))
+      *clara-image*))
 #+nil
 (defparameter *clara-image* (clara-capture-image))
 
 #+nil
 (and::*bla*)
 
-#+nil
+#+nil 
 (and::get-status)
+
 
 
 (defclass clara-camera ()
@@ -326,8 +331,13 @@
 							(:p (:input :type "checkbox" :id "slow-readout" ;:checked "checked"
 								    )
 							    (:label :from "slow-readout" "slow readout"))
-							(:p (:input :type "checkbox" :id "capture-when-change" :checked "checked")
+							(:p (:input :type "radio" :name "capture-type" :id "capture-when-change" :checked "checked")
 							    (:label :from "capture-when-change" "capture when change"))
+							(:p (:input :type "radio" :name "capture-type" :id "capture-continuous")
+							    (:label :from "capture-continuous" "live")
+							    (:div :id "image-number" "0"))
+							(:p (:input :type "radio" :name "capture-type" :id "capture-manual")
+							    (:label :from "capture-manual" "manual"))
 							(:p "exposure" (:input :id "exposure-time" :value exposure-time 
 									       :maxlength "6" :size "6"))
 							(:p "accumulations" (:input :id "accumulations" :value accumulations 
@@ -340,17 +350,23 @@
 							    (:input :id "yend" :value yend :maxlength "4" :size "4"))
 							(:div :id "clara-timings" "()")
 							 (when *zeiss-connection*
-							   (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) do
+							   (loop for (coord val) in (zeiss-mcu-read-position *zeiss-connection*) and step in '(10 10 5)
+							      do
 								(htm (:div (:input :id coord
 										   :type "number" 
 										   :value val
-										   :step 10
+										   :step step
 										   :maxlength "4" :size "4")
 									   (:label :from coord (str coord))))))
 							(:p "lcos pic" (:input :id "forthdd-picnumber"
 									       :type "number" 
 									       :value 108
 									       :step 1
+									       :maxlength "4" :size "4"))
+							(:p "mma radius" (:input :id "mma-radius"
+									       :type "number" 
+									       :value .9
+									       :step .1
 									       :maxlength "4" :size "4")))
 						))))))
 		       
@@ -419,7 +435,27 @@
 					   (when (string= "checked"
 							  (chain ($ "#capture-when-change") (attr "checked")))
 					     (chain ($ "#capture-button") (click))))))))
-			    
+			     
+			     (let ((do-continuous-capture nil)
+				   (image-number 10))
+			       (labels ((update-clara-image ()
+					  (when do-continuous-capture
+					   #+nil (chain ($ "#capture-button") (click))
+					    (chain ($ "#image-number") (html (incf image-number)))
+					    (set-timeout #'update-clara-image (+ 2000 (* 1000 (chain window integration-time)))))))
+				 (chain ($ "#capture-continuous")
+					(change 
+					 (lambda ()
+					   (if (not (string= "checked"
+							 (chain ($ "#capture-continuous")
+								(attr "checked"))))
+					       (progn (setf do-continuous-capture t
+							    image-number 0)
+						      (set-timeout #'update-clara-image (+ 2000 (* 1000 (chain window integration-time)))))
+					       (progn 
+						 (setf do-continuous-capture nil
+						       image-number 0))))))))
+				     
 			     (chain ($ "#clara-image") 
 				    (load ;; draw histogram, when a new image is loaded
 				     (lambda ()
@@ -457,16 +493,16 @@
 					      (attr "src" 
 						    (concatenate 'string "/clara-image?"
 								 ((chain (new (*date)) get-time)))))
-				       (let* ((i 0)
+				       (let* ((i 0) ;; program the progress bar to update itself during exposure
 					      (exp-ms (* 1000 (chain window integration-time)))
 					      (time-step (min 500 (max 50 (/ exp-ms 30))))
 					      (d (* 100 (/ time-step exp-ms)))) 
-					 (labels ((update ()
+					 (labels ((update-progressbar ()
 						    (chain ($ "#progressbar") 
 							   (progressbar "option" "value" (incf i d)))
 						    (when (< i 100)
-						      (set-timeout update time-step))))
-					   (set-timeout update time-step))))))
+						      (set-timeout #'update-progressbar time-step))))
+					   (set-timeout #'update-progressbar time-step))))))
 			     (chain ($ "#X")
 				    (change
 				     (lambda ()
@@ -513,6 +549,17 @@
 						     "?pic-number=" ;; send value to server
 						     (encode-u-r-i-component
 						      (chain ($ "#forthdd-picnumber") (val))))
+					(lambda (r))))))
+
+			     (chain ($ "#mma-radius")
+				    (change
+				     (lambda ()
+				       ((@ $ get) 
+					(concatenate 'string
+						     "/ajax/mma-disk"
+						     "?radius=" ;; send value to server
+						     (encode-u-r-i-component
+						      (chain ($ "#mma-radius") (val))))
 					(lambda (r))))))
 			     
 			     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
@@ -582,6 +629,14 @@
   (setf (hunchentoot:content-type*) "text/plain")
   (format nil "Hey~@[ ~A~]!" slider-value))
 
+(hunchentoot:define-easy-handler (forthdd-settings :uri "/ajax/mma-disk")    (radius)
+  (setf (hunchentoot:content-type*) "text/plain")
+  (progn ;; change mma image
+    (when c::*tcp*
+      (c::upload-disk-image :radius (read-from-string radius))))
+  "")
+
+
 (hunchentoot:define-easy-handler (forthdd-settings :uri "/ajax/forthdd-settings") 
     (pic-number)
   (setf (hunchentoot:content-type*) "text/plain")
@@ -619,6 +674,7 @@
   (when *zeiss-connection*
     (zeiss-mcu-write-position-y *zeiss-connection* (read-from-string value)))
   value)
+
 (hunchentoot:define-easy-handler (z-motor-controller :uri "/ajax/z-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
   (zeiss-mcu-write-position-z *zeiss-connection* (read-from-string value))
