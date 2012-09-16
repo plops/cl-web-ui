@@ -109,7 +109,9 @@
     (and::set-image :xstart xstart :ystart ystart :xend xend :yend yend)
     (setf and::*w* w
 	  and::*h* h)
-    (and::get-acquisition-timings)))
+    (json:encode-json-to-string 
+     (multiple-value-list (and::get-acquisition-timings)))))
+
 
 (defmethod initialize-instance :after ((cam clara-camera) &rest args)
   (declare (ignore args))
@@ -260,14 +262,17 @@
 					      .3s0)))
 		     a))
 	    (ma2 (reduce #'max gamma))
-	    (mi2 (reduce #'min gamma)))
+	    (mi2 (reduce #'min gamma))
+	    (d2 (- ma2 mi2)))
        (dotimes (y h (zpng:write-png png fn))
 	 (dotimes (x w)
 	   (setf (aref image y x 0)
 		 (if *clara-image*
 		     (min 255 (max 0 
-				   (floor (- (aref gamma (+ x (* w y))) mi2)
-					  (/ (- ma2 mi2) 256s0))))
+				   (if (< 0 d2)
+				       (floor (- (aref gamma (+ x (* w y))) mi2)
+					      (/ d2 256s0))
+				       0)))
 		     128))))
        (with-open-file (in fn :element-type '(unsigned-byte 8))
 	 (let ((image-data (make-array (file-length in)
@@ -304,7 +309,8 @@
 			  (:table 
 			   (:tr (:td
 				 (:canvas :width 320 :height 100 :id "histogram-canvas"))
-				(:td "settings"))
+				(:td "settings"
+				     (:div :id "progressbar")))
 			   (:tr
 				   (:td (if *clara-parameters*
 					    (htm (:img :id "clara-image" :src "/clara-image"
@@ -316,7 +322,8 @@
 					  
 					  (with-slots (exposure-time xstart xend ystart yend accumulations) *clara-parameters*
 					    (htm (:form :id "clara-form"
-							(:p (:input :type "checkbox" :id "slow-readout" :checked "checked")
+							(:p (:input :type "checkbox" :id "slow-readout" ;:checked "checked"
+								    )
 							    (:label :from "slow-readout" "slow readout"))
 							(:p (:input :type "checkbox" :id "capture-when-change" :checked "checked")
 							    (:label :from "capture-when-change" "capture when change"))
@@ -375,7 +382,8 @@
 	      
 	      (:script :type "text/javascript"
 		       :src "jquery-ui/development-bundle/jquery-1.8.1.min.js")
-	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable" "resizable" "button") do
+	      (loop for e in '("core" "widget" "mouse" "slider" "tabs" "draggable" 
+			       "resizable" "button" "progressbar") do
 		   (htm (:script :type "text/javascript"
 				 :src (concatenate 'string "jquery-ui/development-bundle/ui/jquery.ui." e ".js"))))
 	      
@@ -385,39 +393,31 @@
 	       (str (ps ($ (lambda () 
 			     #+nil((chain ($ "#tabs") tabs))
 			     ((chain ($ "#capture-button") button))
-
-			     (let ((c (chain ($ "#histogram-canvas") (get 0) (get-context "2d"))))
-			       (chain c (begin-path))
-			       (chain c (move-to 0 0))
-			       (chain c (line-to 320 0))
-			       (chain c (line-to 320 100))
-			       (chain c (line-to 0 100))
-			       (chain c (line-to 0 0))
-			       (chain c (stroke))
-			       (chain c (fill-text "0" 30 10))
-			       (chain c (fill-text "320" 280 10)))
+			     ((chain ($ "#progressbar") progressbar))
 			     
 			     ((chain ($ "#clara-start") button))
 			     ((chain ($ "#clara-stop") button))
 			     
 
-			     (chain ($ "#clara-form") (change (lambda ()
-								((@ $ get) 
-								 (concatenate 'string
-									      "/ajax/camera-settings"
-									      "?exposure-time=" (encode-u-r-i-component (chain ($ "#exposure-time") (val)))
-									      "&xstart=" (encode-u-r-i-component (chain ($ "#xstart") (val)))
-									      "&xend=" (encode-u-r-i-component (chain ($ "#xend") (val)))
-									      "&ystart=" (encode-u-r-i-component (chain ($ "#ystart") (val)))
-									      "&yend=" (encode-u-r-i-component (chain ($ "#yend") (val)))
-									      "&accumulations=" (encode-u-r-i-component (chain ($ "#accumulations") (val)))
-									      "&slow-readout=" (encode-u-r-i-component (chain ($ "#slow-readout") (attr "checked")))
-									      )
-								 (lambda (r) 
-								   (chain ($ "#clara-timings") (html r))
-								   (when (string= "checked"
-										  (chain ($ "#capture-when-change") (attr "checked")))
-								     (chain ($ "#capture-button") (click))))))))
+			     (chain 
+			      ($ "#clara-form")
+			      (change (lambda ()
+					((@ $ get) 
+					 (concatenate 'string
+						      "/ajax/camera-settings"
+						      "?exposure-time=" (encode-u-r-i-component (chain ($ "#exposure-time") (val)))
+						      "&xstart=" (encode-u-r-i-component (chain ($ "#xstart") (val)))
+						      "&xend=" (encode-u-r-i-component (chain ($ "#xend") (val)))
+						      "&ystart=" (encode-u-r-i-component (chain ($ "#ystart") (val)))
+						      "&yend=" (encode-u-r-i-component (chain ($ "#yend") (val)))
+						      "&accumulations=" (encode-u-r-i-component (chain ($ "#accumulations") (val)))
+						      "&slow-readout=" (encode-u-r-i-component (chain ($ "#slow-readout") (attr "checked"))))
+					 (lambda (r) 
+					   (chain ($ "#clara-timings") (html r))
+					   (setf (chain window integration-time) (aref r 2))
+					   (when (string= "checked"
+							  (chain ($ "#capture-when-change") (attr "checked")))
+					     (chain ($ "#capture-button") (click))))))))
 			    
 			     (chain ($ "#clara-image") 
 				    (load ;; draw histogram, when a new image is loaded
@@ -426,13 +426,12 @@
 					"/ajax/histogram-data.json"
 					(lambda (r)
 					  (let ((c (chain ($ "#histogram-canvas") (get 0)
-							  (get-context "2d")))
-						(dat (chain r data)))
+							  (get-context "2d"))))
 					    (setf (chain window bla) r)
 					    
 					    (chain c (clear-rect 0 0 320 240))
-					    (chain c (fill-text (chain r 0) 30 10))
-					    (chain c (fill-text (chain r 1) 280 10))
+					    (chain c (fill-text (chain r 0) 6 95))
+					    (chain c (fill-text (chain r 1) 290 95))
 					    (chain c (begin-path))
 					    (chain c (move-to 0 0))
 					    (chain c (line-to 320 0))
@@ -444,7 +443,8 @@
 					    (chain c (move-to 0 0))
 					    (let ((n (chain r 2 length)))
 					      (dotimes (i n)
-						(chain c (line-to (/ (* 320 i) n) (chain r 2 i)))))
+						(chain c (line-to (* (/ 320 n) i) (- 100 (aref (chain r 2) i))
+								  ))))
 					    (chain c (stroke))))))))
 			     
 			     (chain ($ "#capture-button") 
@@ -532,14 +532,17 @@
 	 (n (length a1))
 	 (mi (reduce #'min a1))
 	 (ma (reduce #'max a1))
-	 (nh 30)
+	 (d (- ma mi))
+	 (nh 45)
 	 (hist (make-array nh :element-type 'fixnum)))
    (dotimes (i n)
      ;; make histogram with bins from [0 .. nh-1]
      (incf (aref hist (min (1- nh) 
-			   (max 0 (round (* (1- nh) (- (aref a1 i) mi))
-					 (- ma mi)))))))
-   (let* ((logs (map 'list #'log hist))
+			   (max 0 (if (< 0 d)
+				      (round (* (1- nh) (- (aref a1 i) mi))
+					     d)
+				      0))))))
+   (let* ((logs (map 'list #'(lambda (x) (if (< 0 x) (log x) 0s0)) hist))
 	  (lmi (reduce #'min logs))
 	  (lma (reduce #'max logs))
 	  (dl (- lma lmi)))
@@ -549,7 +552,8 @@
        ,ma
        ,(mapcar #'(lambda (x) (max 0 (min 100 
 					  (if (< 0 dl)
-					      (floor (* 100 (- x lmi)) dl)
+					      (floor (* 100 (- x lmi))
+						     dl)
 					      0)))) logs)))))
 
 #+nil
@@ -580,7 +584,7 @@
 
 (hunchentoot:define-easy-handler (camera-settings :uri "/ajax/camera-settings") 
     (exposure-time xstart xend ystart yend accumulations slow-readout)
-  (setf (hunchentoot:content-type*) "text/plain")
+  (setf (hunchentoot:content-type*) "application/json")
   (setf *clara-parameters* (make-instance 'clara-camera
 					  :exposure-time (read-from-string exposure-time)
 					  :xstart (read-from-string xstart)
@@ -590,7 +594,7 @@
 					  :accumulations (read-from-string accumulations)
 					  :slow-readout (when (string= "checked" slow-readout)
 							  t)))
-  (format nil "~a" (multiple-value-list (clara-set-parameters *clara-parameters*))))
+  (clara-set-parameters *clara-parameters*))
 
 (hunchentoot:define-easy-handler (x-motor-controller :uri "/ajax/x-motor-controller") (value)
   (setf (hunchentoot:content-type*) "text/plain")
