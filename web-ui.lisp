@@ -284,6 +284,7 @@
 (defvar *clara-parameters* nil)
 
 
+
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
       (:html :lang "en"
@@ -447,6 +448,8 @@
 								  ))))
 					    (chain c (stroke))))))))
 			     
+			     
+			     
 			     (chain ($ "#capture-button") 
 				    (click 
 				     (lambda ()
@@ -454,7 +457,16 @@
 					      (attr "src" 
 						    (concatenate 'string "/clara-image?"
 								 ((chain (new (*date)) get-time)))))
-				       )))
+				       (let* ((i 0)
+					      (exp-ms (* 1000 (chain window integration-time)))
+					      (time-step (min 500 (max 50 (/ exp-ms 30))))
+					      (d (* 100 (/ time-step exp-ms)))) 
+					 (labels ((update ()
+						    (chain ($ "#progressbar") 
+							   (progressbar "option" "value" (incf i d)))
+						    (when (< i 100)
+						      (set-timeout update time-step))))
+					   (set-timeout update time-step))))))
 			     (chain ($ "#X")
 				    (change
 				     (lambda ()
