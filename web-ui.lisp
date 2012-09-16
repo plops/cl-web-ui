@@ -436,25 +436,31 @@
 							  (chain ($ "#capture-when-change") (attr "checked")))
 					     (chain ($ "#capture-button") (click))))))))
 			     
-			     (let ((do-continuous-capture nil)
-				   (image-number 10))
+			     (let ((image-number 10)
+				   (interval-func nil))
 			       (labels ((update-clara-image ()
-					  (when do-continuous-capture
-					   #+nil (chain ($ "#capture-button") (click))
-					    (chain ($ "#image-number") (html (incf image-number)))
-					    (set-timeout #'update-clara-image (+ 2000 (* 1000 (chain window integration-time)))))))
+					 (chain ($ "#capture-button") (click))
+					  (chain ($ "#image-number") (html (incf image-number)))))
 				 (chain ($ "#capture-continuous")
 					(change 
 					 (lambda ()
-					   (if (not (string= "checked"
-							 (chain ($ "#capture-continuous")
-								(attr "checked"))))
-					       (progn (setf do-continuous-capture t
-							    image-number 0)
-						      (set-timeout #'update-clara-image (+ 2000 (* 1000 (chain window integration-time)))))
-					       (progn 
-						 (setf do-continuous-capture nil
-						       image-number 0))))))))
+					   (if (string= "checked"
+							(chain ($ "#capture-continuous")
+							       (attr "checked")))
+					       (setf interval-func
+						     (set-interval #'update-clara-image
+								   (+ 200 (* 1000 (if (chain window integration-time)
+										      (* 2              (chain window integration-time))
+										     1)))))))))
+				 (chain ($ "#capture-manual")
+					(change 
+					 (lambda ()
+					   (when (and interval-func
+						      (string= "checked"
+							       (chain ($ "#capture-manual")
+								      (attr "checked"))))
+					     (clear-interval interval-func)
+					     (setf image-number 0)))))))
 				     
 			     (chain ($ "#clara-image") 
 				    (load ;; draw histogram, when a new image is loaded
