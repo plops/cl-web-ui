@@ -1,6 +1,6 @@
 (declaim #+sbcl(sb-ext:muffle-conditions style-warning))
 (eval-when (:compile-toplevel)
- (ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng))
+ (ql:quickload '(hunchentoot cl-who parenscript cl-fad zpng cl-json))
  (load "../cl-pl2303/libusb0.lisp")
  (load "../mma-reverse/net-control.lisp")
  (setf asdf:*central-registry* 
@@ -8,6 +8,7 @@
 			      "C:/Users/martin/stage/sb-andor2-win/")
        #+linux '("~/stage/sb-andor2-win/"))
  (require :sb-andor2-win))
+
 #+nil
 (progn
  (defparameter libusb0::*forthdd*
@@ -277,6 +278,7 @@
 
 (defvar *clara-parameters* nil)
 
+
 (define-easy-handler (tabs :uri "/tabs") ()
     (with-html-output-to-string (s nil :prologue t :indent t)
       (:html :lang "en"
@@ -391,7 +393,9 @@
 			       (chain c (line-to 320 100))
 			       (chain c (line-to 0 100))
 			       (chain c (line-to 0 0))
-			       (chain c (stroke)))
+			       (chain c (stroke))
+			       (chain c (fill-text "0" 30 10))
+			       (chain c (fill-text "320" 280 10)))
 			     
 			     ((chain ($ "#clara-start") button))
 			     ((chain ($ "#clara-stop") button))
@@ -415,11 +419,42 @@
 										  (chain ($ "#capture-when-change") (attr "checked")))
 								     (chain ($ "#capture-button") (click))))))))
 			    
-		     
-			     (chain ($ "#capture-button") (click (lambda ()
-								   (chain ($ "#clara-image") (attr "src" 
-												  (concatenate 'string "/clara-image?"
-													       ((chain (new (*date)) get-time))))))))
+			     (chain ($ "#clara-image") 
+				    (load ;; draw histogram, when a new image is loaded
+				     (lambda ()
+				       ((@ $ get)
+					"/ajax/histogram-data.json"
+					(lambda (r)
+					  (let ((c (chain ($ "#histogram-canvas") (get 0)
+							  (get-context "2d")))
+						(dat (chain r data)))
+					    (setf (chain window bla) r)
+					    
+					    (chain c (clear-rect 0 0 320 240))
+					    (chain c (fill-text (chain r 0) 30 10))
+					    (chain c (fill-text (chain r 1) 280 10))
+					    (chain c (begin-path))
+					    (chain c (move-to 0 0))
+					    (chain c (line-to 320 0))
+					    (chain c (line-to 320 100))
+					    (chain c (line-to 0 100))
+					    (chain c (line-to 0 0))
+					    (chain c (stroke))
+					    (chain c (begin-path))
+					    (chain c (move-to 0 0))
+					    (let ((n (chain r 2 length)))
+					      (dotimes (i n)
+						(chain c (line-to (/ (* 320 i) n) (chain r 2 i)))))
+					    (chain c (stroke))))))))
+			     
+			     (chain ($ "#capture-button") 
+				    (click 
+				     (lambda ()
+				       (chain ($ "#clara-image")
+					      (attr "src" 
+						    (concatenate 'string "/clara-image?"
+								 ((chain (new (*date)) get-time)))))
+				       )))
 			     (chain ($ "#X")
 				    (change
 				     (lambda ()
@@ -490,6 +525,42 @@
 				     (lambda ()
 				       ((@ $ get) "/ajax/bla" (lambda (r)
 								(chain ($ "#value") (html r))))))))))))))))
+
+
+(defun calc-histogram (img2)
+  (let* ((a1 (sb-ext:array-storage-vector img2))
+	 (n (length a1))
+	 (mi (reduce #'min a1))
+	 (ma (reduce #'max a1))
+	 (nh 30)
+	 (hist (make-array nh :element-type 'fixnum)))
+   (dotimes (i n)
+     ;; make histogram with bins from [0 .. nh-1]
+     (incf (aref hist (min (1- nh) 
+			   (max 0 (round (* (1- nh) (- (aref a1 i) mi))
+					 (- ma mi)))))))
+   (let* ((logs (map 'list #'log hist))
+	  (lmi (reduce #'min logs))
+	  (lma (reduce #'max logs))
+	  (dl (- lma lmi)))
+     ;; scale log values to be integers in [0 .. 100]
+     `(
+       ,mi
+       ,ma
+       ,(mapcar #'(lambda (x) (max 0 (min 100 
+					  (if (< 0 dl)
+					      (floor (* 100 (- x lmi)) dl)
+					      0)))) logs)))))
+
+#+nil
+(calc-histogram *clara-image*)
+
+(hunchentoot:define-easy-handler (histogram-data :uri "/ajax/histogram-data.json") ()
+  (setf (hunchentoot:content-type*) "application/json")
+  (json:encode-json-to-string (calc-histogram *clara-image*)))
+
+
+
 
 (hunchentoot:define-easy-handler (process-slider :uri "/ajax/process-slider") (slider-value)
   (setf (hunchentoot:content-type*) "text/plain")
