@@ -25,7 +25,7 @@
 #+nil
 (c::mma-init)
 #+nil
-(c::upload-disk-image :radius .3)
+(c::upload-disk-image :radius .5)
 #+nil
 (c::with-tcp c::*tcp* (c::status))
 
@@ -264,7 +264,7 @@
 					 :element-type 'single-float)))
 		     (dotimes (i n)
 		       (setf (aref a i) (expt (+ (aref ci1 i) .01 (- mi))
-					      .3s0)))
+					      1.2s0)))
 		     a))
 	    (ma2 (reduce #'max gamma))
 	    (mi2 (reduce #'min gamma))
@@ -450,8 +450,8 @@
 					       (setf interval-func
 						     (set-interval #'update-clara-image
 								   (+ 200 (* 1000 (if (chain window integration-time)
-										      (* 2              (chain window integration-time))
-										     1)))))))))
+										      (* 1.1 (chain window integration-time)) 
+										      1)))))))))
 				 (chain ($ "#capture-manual")
 					(change 
 					 (lambda ()
@@ -697,12 +697,3 @@
 #+nil
 (zeiss-mcu-read-position *zeiss-connection*)
 
-#+nil
-(ql:quickload "hunchentoot-test")
-#+nil
-(defparameter *acceptor2*
- (start (make-instance 'acceptor :port 4242
-		       :access-log-destination *standard-output*
-		       :message-log-destination *standard-output*)))
-#+nil
-(hunchentoot-test:test-hunchentoot "http://localhost:4242")
