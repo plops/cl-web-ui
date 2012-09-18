@@ -183,12 +183,18 @@
 			    :element-type '(unsigned-byte 8)
 			    :initial-contents (map 'list #'char-code str))))
 	(libusb0::bulk-write con a :endpoint 2)
-	(sleep .1)
+	(sleep .2)
 	(list e
 	      (let ((str ;; remove trailing ^M
 		     (map 'string #'code-char
 			  (libusb0::bulk-read con #x5 :endpoint #x83))))
-		(read-from-string (subseq str 0 (1- (length str)))))))))
+		(read-from-string
+		 (if (eq (aref str (1- (length str)))
+			 #\Return)
+		     (subseq str 0 (1- (length str)))
+		     str)))))))
+
+
 
 #+nil
 (zeiss-mcu-read-position *zeiss-connection*)
@@ -264,7 +270,7 @@
 					 :element-type 'single-float)))
 		     (dotimes (i n)
 		       (setf (aref a i) (expt (+ (aref ci1 i) .01 (- mi))
-					      1.2s0)))
+					      1.s0)))
 		     a))
 	    (ma2 (reduce #'max gamma))
 	    (mi2 (reduce #'min gamma))
@@ -357,18 +363,29 @@
 										   :value val
 										   :step step
 										   :maxlength "4" :size "4")
-									   (:label :from coord (str coord))))))
+									   (:label :from coord (str coord)))))
+							   (htm (:p "note: increase Z to move into sample")))
 							(:p "lcos pic" (:input :id "forthdd-picnumber"
 									       :type "number" 
 									       :value 108
 									       :step 1
 									       :maxlength "4" :size "4"))
-							(:p "mma radius" (:input :id "mma-radius"
+							(:form :id "mma-form"
+							 (:p "mma radius" (:input :id "mma-radius"
+										  :type "number" 
+										  :value 1.0
+										  :step .1
+										  :maxlength "4" :size "4"))
+							 (:p "mma rho" (:input :id "mma-rho"
 									       :type "number" 
-									       :value .9
+									       :value 0.0
 									       :step .1
-									       :maxlength "4" :size "4")))
-						))))))
+									       :maxlength "4" :size "4"))
+							 (:p "mma theta" (:input :id "mma-theta"
+										 :type "number" 
+										 :value 0.0
+										 :step .1
+										 :maxlength "4" :size "4"))))))))))
 		       
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
@@ -557,15 +574,15 @@
 						      (chain ($ "#forthdd-picnumber") (val))))
 					(lambda (r))))))
 
-			     (chain ($ "#mma-radius")
+			     (chain ($ "#mma-form")
 				    (change
 				     (lambda ()
 				       ((@ $ get) 
 					(concatenate 'string
 						     "/ajax/mma-disk"
-						     "?radius=" ;; send value to server
-						     (encode-u-r-i-component
-						      (chain ($ "#mma-radius") (val))))
+						     "?radius=" (encode-u-r-i-component (chain ($ "#mma-radius") (val)))
+						     "&rho=" (encode-u-r-i-component (chain ($ "#mma-rho") (val)))
+						     "&theta=" (encode-u-r-i-component (chain ($ "#mma-theta") (val))))
 					(lambda (r))))))
 			     
 			     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
@@ -635,11 +652,13 @@
   (setf (hunchentoot:content-type*) "text/plain")
   (format nil "Hey~@[ ~A~]!" slider-value))
 
-(hunchentoot:define-easy-handler (mma-disk :uri "/ajax/mma-disk") (radius)
+(hunchentoot:define-easy-handler (mma-disk :uri "/ajax/mma-disk") (radius rho theta)
   (setf (hunchentoot:content-type*) "image/png")
   (progn ;; change mma image
     (if c::*tcp*
-	(progn (c::upload-disk-image :radius (read-from-string radius))
+	(progn (c::upload-disk-image :radius (read-from-string radius)
+				     :rho (read-from-string rho)
+				     :theta (read-from-string theta))
 	       (with-open-file (in "c:/Users/martin/stage/cl-web-ui/mma/0000.png"
 				   :element-type '(unsigned-byte 8))
 		 (let ((image-data (make-array (file-length in)
@@ -658,7 +677,47 @@
 		    (list (read-from-string pic-number)))))
   "")
 
+(defun capture-scan-lcos (pics)
+  (dolist (p pics)
+    (format t "~a~%" p)
+    (libusb0::forthdd-talk libusb0::*forthdd* #x23 
+			   (list p))
+    (sleep .1)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (when *clara-image*
+     (destructuring-bind (h w) (array-dimensions *clara-image*)
+       (let* ((png (make-instance 'zpng:png
+				  :color-type :grayscale
+				  :width w
+				  :height h))
+	      (image (zpng:data-array png))
+	      (fn (make-pathname :name (format nil "clara-image~4,'0d" p)
+				 :type "png" :version nil))
+	      (ci1 (sb-ext:array-storage-vector *clara-image*))
+	      (mi (reduce #'min ci1))
+	      (ma (reduce #'max ci1))
+	      (d (- ma mi)))
+	 (dotimes (y h (zpng:write-png png fn))
+	   (dotimes (x w)
+	     (setf (aref image y x 0)
+		   (min 255
+			(max 0 
+			     (if (< 0 d)
+				 (floor (- (aref ci1 (+ y (* h x))) mi)
+					(/ d 256s0))
+				 0))))))
+	 (with-open-file (in fn :element-type '(unsigned-byte 8))
+	   (let ((image-data (make-array (file-length in)
+					 :element-type '(unsigned-byte 8))))
+	     (read-sequence image-data in) 
+	     image-data)))))))
 
+#+nil
+(time
+ (capture-scan-lcos (concatenate 'list 
+		     (loop for i from 50 below 75 collect i)
+		     (loop for i from 100 below 200 collect i))))
 
 
 (hunchentoot:define-easy-handler (camera-settings :uri "/ajax/camera-settings") 
