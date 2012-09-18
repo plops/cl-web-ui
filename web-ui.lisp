@@ -199,6 +199,15 @@
 #+nil
 (zeiss-mcu-read-position *zeiss-connection*)
 
+#+nil
+(libusb0::bulk-write libusb0::*forthdd* 
+		     (let ((str "!!XX;"))
+		       (make-array (length str)
+				   :element-type '(unsigned-byte 8)
+				   :initial-contents 
+				   (map 'list #'char-code str)))
+		      :endpoint 2)
+
 (defmethod zeiss-mcu-write-position-x ((con libusb0::usb-connection) pos)
   (let* ((str (format nil "!!XA~d;" pos))
 	 (a (make-array (length str)
@@ -370,7 +379,7 @@
 									       :value 108
 									       :step 1
 									       :maxlength "4" :size "4"))
-							(:form :id "mma-form"
+							(:div :id "mma-settingsxx"
 							 (:p "mma radius" (:input :id "mma-radius"
 										  :type "number" 
 										  :value 1.0
@@ -385,7 +394,8 @@
 										 :type "number" 
 										 :value 0.0
 										 :step .1
-										 :maxlength "4" :size "4"))))))))))
+										 :maxlength "4" :size "4"))
+							 (:p "when looking from the front on the microscope, x axis towards left, y towards front. on edge for rho=1")))))))))
 		       
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
@@ -436,6 +446,13 @@
 			     (chain 
 			      ($ "#clara-form")
 			      (change (lambda ()
+					((@ $ get) 
+					(concatenate 'string
+						     "/ajax/mma-disk"
+						     "?radius=" (encode-u-r-i-component (chain ($ "#mma-radius") (val)))
+						     "&rho=" (encode-u-r-i-component (chain ($ "#mma-rho") (val)))
+						     "&theta=" (encode-u-r-i-component (chain ($ "#mma-theta") (val))))
+					(lambda (r)))
 					((@ $ get) 
 					 (concatenate 'string
 						      "/ajax/camera-settings"
@@ -574,16 +591,7 @@
 						      (chain ($ "#forthdd-picnumber") (val))))
 					(lambda (r))))))
 
-			     (chain ($ "#mma-form")
-				    (change
-				     (lambda ()
-				       ((@ $ get) 
-					(concatenate 'string
-						     "/ajax/mma-disk"
-						     "?radius=" (encode-u-r-i-component (chain ($ "#mma-radius") (val)))
-						     "&rho=" (encode-u-r-i-component (chain ($ "#mma-rho") (val)))
-						     "&theta=" (encode-u-r-i-component (chain ($ "#mma-theta") (val))))
-					(lambda (r))))))
+			     
 			     
 			     #+Nil (chain ($ "#draggable") (draggable (create containment "#camera-chip")))
 			     #+nil (chain ($ "#draggable") (resizable (create
@@ -652,21 +660,28 @@
   (setf (hunchentoot:content-type*) "text/plain")
   (format nil "Hey~@[ ~A~]!" slider-value))
 
+
 (hunchentoot:define-easy-handler (mma-disk :uri "/ajax/mma-disk") (radius rho theta)
-  (setf (hunchentoot:content-type*) "image/png")
+  (setf (hunchentoot:content-type*) "text/plain")
   (progn ;; change mma image
     (if c::*tcp*
-	(progn (c::upload-disk-image :radius (read-from-string radius)
-				     :rho (read-from-string rho)
-				     :theta (read-from-string theta))
-	       (with-open-file (in "c:/Users/martin/stage/cl-web-ui/mma/0000.png"
+	(progn 
+	  (c::upload-disk-image :radius (read-from-string radius)
+				:rho (read-from-string rho)
+				:theta (read-from-string theta))
+	  #+nil(with-open-file (in "c:/Users/martin/stage/cl-web-ui/mma/0000.png"
 				   :element-type '(unsigned-byte 8))
 		 (let ((image-data (make-array (file-length in)
 					       :element-type '(unsigned-byte 8))))
 		   (read-sequence image-data in)
-		   image-data)))
-	"")))
+		   image-data))
+	  ""))))
 
+
+#+nil
+(c::upload-disk-image :radius .3
+		      :rho .3
+		      :theta 0)
 
 (hunchentoot:define-easy-handler (forthdd-settings :uri "/ajax/forthdd-settings") 
     (pic-number)
@@ -713,11 +728,79 @@
 	     (read-sequence image-data in) 
 	     image-data)))))))
 
+(defun store-clara-image-as-png (pic)
+ (when *clara-image*
+   (destructuring-bind (h w) (array-dimensions *clara-image*)
+     (let* ((png (make-instance 'zpng:png
+				:color-type :grayscale
+				:width w
+				:height h))
+	    (image (zpng:data-array png))
+	    (fn (make-pathname :name (format nil "clara-image~4,'0d" pic)
+			       :type "png" :version nil))
+	    (ci1 (sb-ext:array-storage-vector *clara-image*))
+	    (mi (reduce #'min ci1))
+	    (ma (reduce #'max ci1))
+	    (d (- ma mi)))
+       (dotimes (y h (zpng:write-png png fn))
+	 (dotimes (x w)
+	   (setf (aref image y x 0)
+		 (min 255
+		      (max 0 
+			   (if (< 0 d)
+			       (floor (- (aref ci1 (+ y (* h x))) mi)
+				      (/ d 256s0))
+			       0))))))
+       (with-open-file (in fn :element-type '(unsigned-byte 8))
+	 (let ((image-data (make-array (file-length in)
+				       :element-type '(unsigned-byte 8))))
+	   (read-sequence image-data in) 
+	   image-data))))))
+
 #+nil
 (time
  (capture-scan-lcos (concatenate 'list 
 		     (loop for i from 50 below 75 collect i)
 		     (loop for i from 100 below 200 collect i))))
+
+
+
+(defun capture-scan-mma ()
+
+  (progn ;; wide field
+    (c::upload-disk-image :radius 1.0 :rho 0.0 :theta 0.0)
+    (libusb0::forthdd-talk libusb0::*forthdd* #x23 
+			   '(30)
+			   
+			   )
+    (sleep .1)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 0))
+
+  (progn ;; illuminate central area
+    (libusb0::forthdd-talk libusb0::*forthdd* #x23 '(30)))
+  
+  (progn ;; less angles
+    (c::upload-disk-image :radius .3 :rho 0.0 :theta 0.0)
+    
+    (sleep .1)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 1))
+
+  (loop for theta-deg in '(0 30 60 90 120 150 180 210 240 270 300 330 360) do
+   (progn ;; angular illumination
+     (c::upload-disk-image :radius .3 :rho 0.7 :theta (* theta-deg pi (/ 180s0)))
+     (sleep .1)
+     (defparameter *clara-image* (clara-capture-image))
+     (sleep .1)
+     (store-clara-image-as-png (+ 1000 theta-deg)))))
+
+
+#+nil
+(time
+ (capture-scan-mma))
 
 
 (hunchentoot:define-easy-handler (camera-settings :uri "/ajax/camera-settings") 
