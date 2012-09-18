@@ -779,15 +779,23 @@
     (store-clara-image-as-png 0))
 
   (progn ;; illuminate central area
-    (libusb0::forthdd-talk libusb0::*forthdd* #x23 '(30)))
+    (libusb0::forthdd-talk libusb0::*forthdd* #x23 '(155)))
   
+  (progn ;; all angles
+    (c::upload-disk-image :radius 1.0 :rho 0.0 :theta 0.0)
+    
+    (sleep .1)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 1))
+
   (progn ;; less angles
     (c::upload-disk-image :radius .3 :rho 0.0 :theta 0.0)
     
     (sleep .1)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
-    (store-clara-image-as-png 1))
+    (store-clara-image-as-png 2))
 
   (loop for theta-deg in '(0 30 60 90 120 150 180 210 240 270 300 330 360) do
    (progn ;; angular illumination
