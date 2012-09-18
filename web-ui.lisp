@@ -373,7 +373,7 @@
 										   :step step
 										   :maxlength "4" :size "4")
 									   (:label :from coord (str coord)))))
-							   (htm (:p "note: increase Z to move into sample")))
+							   (htm (:p "note: in the camera picture, y is up, x is left. on the microscope table x is towards left, y to the back, increase Z to move into sample. the stored png is rotated clockwise and mirrored on y axis.")))
 							(:p "lcos pic" (:input :id "forthdd-picnumber"
 									       :type "number" 
 									       :value 108
@@ -692,6 +692,18 @@
 		    (list (read-from-string pic-number)))))
   "")
 
+
+(defun demo-mma ()
+  (libusb0::forthdd-talk libusb0::*forthdd* #x23 
+			 '(30))
+  (loop for theta-deg in '(0 30 60 90 120 150 180 210 240 270 300 330 360) do
+       (progn ;; angular illumination
+	 (c::upload-disk-image :radius .3 :rho 0.7 :theta (* theta-deg pi (/ 180s0)))
+	 (sleep .1)
+	 (defparameter *clara-image* (clara-capture-image))
+	 (sleep .1))))
+
+
 (defun capture-scan-lcos (pics)
   (dolist (p pics)
     (format t "~a~%" p)
@@ -728,6 +740,33 @@
 	     (read-sequence image-data in) 
 	     image-data)))))))
 
+(defun write-pgm16 (filename img)
+  (declare (simple-string filename)
+	   ((array (unsigned-byte 16) 2) img)
+	   (values null &optional))
+  (destructuring-bind (h w)
+      (array-dimensions img)
+    (declare ((integer 0 65535) w h))
+    (with-open-file (s filename
+		       :direction :output
+		       :if-exists :supersede
+		       :if-does-not-exist :create)
+      (declare (stream s))
+      (format s "P5~%~D ~D~%65535~%" h w))
+    (with-open-file (s filename 
+		       :element-type '(unsigned-byte 16)
+		       :direction :output
+		       :if-exists :append)
+      (let ((data-1d (make-array 
+		      (* h w)
+		      :element-type '(unsigned-byte 16)
+		      :displaced-to img)))
+	(write-sequence data-1d s)))
+    nil))
+
+#+nil
+(write-pgm16 "clara-image.pgm"  *clara-image*)
+
 (defun store-clara-image-as-png (pic)
  (when *clara-image*
    (destructuring-bind (h w) (array-dimensions *clara-image*)
@@ -751,11 +790,7 @@
 			       (floor (- (aref ci1 (+ y (* h x))) mi)
 				      (/ d 256s0))
 			       0))))))
-       (with-open-file (in fn :element-type '(unsigned-byte 8))
-	 (let ((image-data (make-array (file-length in)
-				       :element-type '(unsigned-byte 8))))
-	   (read-sequence image-data in) 
-	   image-data))))))
+       (write-pgm16 (format nil "clara-image~4,'0d.pgm" pic)  *clara-image*)))))
 
 #+nil
 (time
@@ -766,7 +801,18 @@
 
 
 (defun capture-scan-mma ()
-
+  (progn ;; dark image on mma and lcos
+    (c::upload-disk-image :radius 0.0 :rho 0.0 :theta 0.0)
+    (libusb0::forthdd-talk libusb0::*forthdd* #x23 
+			   '(100))
+    (sleep .1)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 0)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 1))
+  
   (progn ;; wide field
     (c::upload-disk-image :radius 1.0 :rho 0.0 :theta 0.0)
     (libusb0::forthdd-talk libusb0::*forthdd* #x23 
@@ -776,7 +822,10 @@
     (sleep .1)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
-    (store-clara-image-as-png 0))
+    (store-clara-image-as-png 2)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 3))
 
   (progn ;; illuminate central area
     (libusb0::forthdd-talk libusb0::*forthdd* #x23 '(155)))
@@ -787,7 +836,10 @@
     (sleep .1)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
-    (store-clara-image-as-png 1))
+    (store-clara-image-as-png 4)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 5))
 
   (progn ;; less angles
     (c::upload-disk-image :radius .3 :rho 0.0 :theta 0.0)
@@ -795,15 +847,22 @@
     (sleep .1)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
-    (store-clara-image-as-png 2))
+    (store-clara-image-as-png 5)
+    (defparameter *clara-image* (clara-capture-image))
+    (sleep .1)
+    (store-clara-image-as-png 6))
 
   (loop for theta-deg in '(0 30 60 90 120 150 180 210 240 270 300 330 360) do
    (progn ;; angular illumination
-     (c::upload-disk-image :radius .3 :rho 0.7 :theta (* theta-deg pi (/ 180s0)))
+     (c::upload-disk-image :radius .2 :rho 0.8
+			   :theta (* theta-deg pi (/ 180s0)))
      (sleep .1)
      (defparameter *clara-image* (clara-capture-image))
      (sleep .1)
-     (store-clara-image-as-png (+ 1000 theta-deg)))))
+     (store-clara-image-as-png (+ 1000 theta-deg))
+     (defparameter *clara-image* (clara-capture-image))
+     (sleep .1)
+     (store-clara-image-as-png (+ 1001 theta-deg)))))
 
 
 #+nil
