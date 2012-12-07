@@ -25,7 +25,7 @@
 #+nil
 (c::mma-init)
 #+nil
-(c::upload-disk-image :radius .5)
+(c::upload-disk-image :radius 2 :rho 0 :theta 0)
 #+nil
 (c::with-tcp c::*tcp* (c::status))
 
@@ -314,9 +314,7 @@
 	      (:meta :http-equiv "Content-Type"
 		     :content "text/html; charset=utf-8")
 	      (:title "jQuery UI Tabs Example 1")
-	      (:style "#draggable {width:150px; height:150px; padding:0; margin:0;}
-#camera-chip {width:400px; height:300px; padding:0; margin:0;}
-#draggable p { text-align: center; margin: 0; }")
+	      (:style "body, td {font-size: 8pt}")
 	      )
 	     (:body 
 	      (:div :id "tabs"
@@ -379,24 +377,26 @@
 									       :value 108
 									       :step 1
 									       :maxlength "4" :size "4"))
-							(:div :id "mma-settingsxx"
-							 (:p "mma radius" (:input :id "mma-radius"
-										  :type "number" 
-										  :value 1.0
-										  :step .1
-										  :maxlength "4" :size "4"))
-							 (:p "mma rho" (:input :id "mma-rho"
-									       :type "number" 
-									       :value 0.0
-									       :step .1
-									       :maxlength "4" :size "4"))
-							 (:p "mma theta" (:input :id "mma-theta"
-										 :type "number" 
-										 :value 0.0
-										 :step .1
-										 :maxlength "4" :size "4"))
-							 (:p "when looking from the front on the microscope, x axis towards left, y towards front. on edge for rho=1")))))))))
-		       
+							)))))))
+			  
+			  (:form :id "mma-form"
+				 (:p "mma radius" (:input :id "mma-radius"
+							  :type "number" 
+							  :value 1.0
+							  :step .1
+							  :maxlength "4" :size "4"))
+				 (:p "mma rho" (:input :id "mma-rho"
+						       :type "number" 
+						       :value 0.0
+						       :step .1
+						       :maxlength "4" :size "4"))
+				 (:p "mma theta" (:input :id "mma-theta"
+							 :type "number" 
+							 :value 0.0
+							 :step .1
+							 :maxlength "4" :size "4"))
+				 (:p "when looking from the front on the microscope, x axis towards left, y towards front. on edge for rho=1"))
+			  
 			  #+nil(:div :id "camera-chip" :class "ui-widget-content"
 				(:img :src "/circle?width=320&height=240")
 				(:div :id "draggable" :class "ui-widget-content"
@@ -446,13 +446,7 @@
 			     (chain 
 			      ($ "#clara-form")
 			      (change (lambda ()
-					((@ $ get) 
-					(concatenate 'string
-						     "/ajax/mma-disk"
-						     "?radius=" (encode-u-r-i-component (chain ($ "#mma-radius") (val)))
-						     "&rho=" (encode-u-r-i-component (chain ($ "#mma-rho") (val)))
-						     "&theta=" (encode-u-r-i-component (chain ($ "#mma-theta") (val))))
-					(lambda (r)))
+					
 					((@ $ get) 
 					 (concatenate 'string
 						      "/ajax/camera-settings"
@@ -469,7 +463,17 @@
 					   (when (string= "checked"
 							  (chain ($ "#capture-when-change") (attr "checked")))
 					     (chain ($ "#capture-button") (click))))))))
-			     
+
+			     (chain ($ "#mma-form")
+				    (change (lambda ()
+					     ((@ $ get) 
+					      (concatenate 'string
+							   "/ajax/mma-disk"
+							   "?radius=" (encode-u-r-i-component (chain ($ "#mma-radius") (val)))
+							   "&rho=" (encode-u-r-i-component (chain ($ "#mma-rho") (val)))
+							   "&theta=" (encode-u-r-i-component (chain ($ "#mma-theta") (val))))
+					      (lambda (r))))))
+
 			     (let ((image-number 10)
 				   (interval-func nil))
 			       (labels ((update-clara-image ()
@@ -815,10 +819,7 @@
   
   (progn ;; wide field
     (c::upload-disk-image :radius 1.0 :rho 0.0 :theta 0.0)
-    (libusb0::forthdd-talk libusb0::*forthdd* #x23 
-			   '(30)
-			   
-			   )
+    (libusb0::forthdd-talk libusb0::*forthdd* #x23 '(30))
     (sleep .1)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
@@ -832,7 +833,6 @@
   
   (progn ;; all angles
     (c::upload-disk-image :radius 1.0 :rho 0.0 :theta 0.0)
-    
     (sleep .1)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
@@ -847,10 +847,10 @@
     (sleep .1)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
-    (store-clara-image-as-png 5)
+    (store-clara-image-as-png 6)
     (defparameter *clara-image* (clara-capture-image))
     (sleep .1)
-    (store-clara-image-as-png 6))
+    (store-clara-image-as-png 7))
 
   (loop for theta-deg in '(0 30 60 90 120 150 180 210 240 270 300 330 360) do
    (progn ;; angular illumination
