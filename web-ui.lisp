@@ -25,10 +25,48 @@
 #+nil
 (c::mma-init)
 #+nil
-(c::upload-disk-image :radius 2 :rho 0 :theta 0)
+(c::upload-disk-image :radius .4 :rho 0 :theta 0)
 #+nil
 (c::with-tcp c::*tcp* (c::status))
+#+nil
+(c::with-tcp c::*tcp* (c::set-extern-trigger))
+#+nil
+(c::with-tcp c::*tcp* (c::set-start-mma))
 
+(define-condition packet-error (error)
+  ((text :initarg :text :reader text)))
+
+(defun make-err ()
+  (error 'packet-error :text 
+	 (format nil "packet wasn't successful: ~a"
+		 (list 'a))))
+#+nil
+(make-err)
+#+nil
+(tagbody 
+ again
+   (format t "bla~%")
+   (handler-case
+       (make-err)
+     (packet-error () 
+       (sleep 1)
+       (go again))))
+
+
+#+nil
+(defparameter *bla* (c::with-tcp c::*tcp* (c::status)))
+#+nil
+(tagbody 
+ again
+   (handler-case
+       (unless (eq #\D (elt (second (first (c::with-tcp c::*tcp* (c::status)))) 50))
+	 (c::with-tcp c::*tcp* (c::set-start-mma)))
+     (packet-error () 
+       (sleep 1)
+       (go again))))
+#+nil
+(unless (eq #\D (elt (second (first (c::with-tcp c::*tcp* (c::status)))) 50))
+  (c::with-tcp c::*tcp* (c::set-start-mma)))
 
 #+nil
 (time
@@ -42,7 +80,7 @@
 (progn ;; change camera parameters
  (defparameter *clara-parameters* 
    (make-instance 'clara-camera
-		  :accumulations 50
+		  :accumulations 1000
 		  :slow-readout nil))
  (clara-set-parameters *clara-parameters*))
 
@@ -720,6 +758,10 @@
   "")
 
 
+#+nil
+(libusb0::forthdd-talk libusb0::*forthdd* #x23 
+		       (list 128))
+
 (defun demo-mma ()
   (libusb0::forthdd-talk libusb0::*forthdd* #x23 
 			 '(128))
@@ -764,40 +806,26 @@
 (zeiss-mcu-write-position-y *zeiss-connection* (+ 174 300 300))
 
 (defun scan-exposures-multiline ()
-  (zeiss-mcu-write-position-y *zeiss-connection* 4800)
-  (scan-exposures 0 5)
-  (zeiss-mcu-write-position-y *zeiss-connection* (+ 400 4800))
-  (scan-exposures 1 30)
-  (zeiss-mcu-write-position-y *zeiss-connection* (+ 400 4800))
-  (scan-exposures 2 30)
-  (zeiss-mcu-write-position-y *zeiss-connection* (+ 400 4800))
-  (scan-exposures 3 50)
-  (zeiss-mcu-write-position-y *zeiss-connection* (+ 400 4800))
-  (scan-exposures 4 50)
-  (zeiss-mcu-write-position-y *zeiss-connection* (+ 400 4800))
-  (scan-exposures 5 100))
+  (let ((y 0))
+   (zeiss-mcu-write-position-y *zeiss-connection* y)
+   (scan-exposures 0 5)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 1 30)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 2 30)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 3 50)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 4 50)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 5 100)))
 
 #+nil
 (time
  (scan-exposures-multiline))
 
-(defun scan-exposures (scan n)
-  (loop for (lcos rad rho theta-deg) in 
-       '((126 1.5 .0 0) ;; white
-	 (125 1.5 .0 0) ;; black
-	 (128 2 0 0) ;; F
-	 (128 .5 .7 0) ;; F
-	 (128 .5 .7 60) 
-	 (128 .5 .7 120)
-	 (128 .5 .7 180)
-	 (128 .5 .7 240)
-	 (128 .5 .7 300)
-	 (125 1.5 .0 0) ;; black
-	 (126 1.5 .0 0) ;; white
-	 ) 
-     and j from 0 do
-       (format t "~a~%" (list scan j lcos  theta-deg))
-       (progn ;; angular illumination
+(defun do-bleach (lcos rad rho theta-deg j scan n)
+  (progn ;; angular illumination
 	 (progn ;; change camera parameters to 50 accums
 	   (defparameter *clara-parameters* 
 	     (make-instance 'clara-camera
@@ -806,18 +834,30 @@
 	   (clara-set-parameters *clara-parameters*))
 	 (libusb0::forthdd-talk libusb0::*forthdd* #x23 
 				(list lcos))
+	 
 	 (c::upload-disk-image :radius rad :rho rho 
 			       :theta (* theta-deg pi (/ 180s0)))
-	 (zeiss-mcu-write-position-x *zeiss-connection* (+ 7800 (* 400 j)))
+	 (format t "mma-status ~a~%" (c::with-tcp c::*tcp* (c::status)))
+	 (zeiss-mcu-write-position-x *zeiss-connection* (+ 0 (* 400 j)))
 	 (sleep 1)
 	 (dotimes (i n)
-	   (format t "illum ~a~%" i)
+	   (format t "illum ~a~%" (list i
+					(tagbody 
+					 again
+					   (handler-case
+					       (unless (eq #\D (elt (second (first (c::with-tcp c::*tcp* (c::status)))) 50))
+						 (c::with-tcp c::*tcp* (c::set-start-mma)))
+					     (c::packet-error () 
+					       (sleep 1)
+					       (go again))))
+					(c::with-tcp c::*tcp* (c::status))))
 	   (defparameter *clara-image* (clara-capture-image)))
 	 
 	 (progn ;; check how bleached area looks like
 	  (libusb0::forthdd-talk libusb0::*forthdd* #x23 
 				 '(126)) ;; white
 	  (c::upload-disk-image :radius 1.5)
+	  (format t "mma-status ~a~%" (c::with-tcp c::*tcp* (c::status)))
 	  (progn ;; capture one good image with one exposure
 	    (defparameter *clara-parameters* 
 	      (make-instance 'clara-camera
@@ -829,7 +869,25 @@
 				    (format nil 
 					    "scan-exposures/im~2,'0d-~4,'0d" scan j)
 				    :type "png" :version nil)
-		     *clara-image*)))))
+		     *clara-image*))))
+
+(defun scan-exposures (scan n)
+  (loop for (lcos rad rho theta-deg) in 
+       '((126 1.5 .0 0) ;; white
+	 (125 1.5 .0 0) ;; black
+	 (128 2 0 0) ;; balken
+	 (128 .5 .7 0) 
+	 (128 .5 .7 60) 
+	 (128 .5 .7 120)
+	 (128 .5 .7 180)
+	 (128 .5 .7 240)
+	 (128 .5 .7 300)
+	 (125 1.5 .0 0) ;; black
+	 (126 1.5 .0 0) ;; white
+	 ) 
+     and j from 0 do
+       (format t "~a~%" (list scan j lcos  theta-deg))
+       (do-bleach lcos rad rho theta-deg j scan n)))
 #+nil
 (time (scan-exposures))
 
