@@ -25,7 +25,7 @@
 #+nil
 (c::mma-init)
 #+nil
-(c::upload-disk-image :radius .4 :rho 0 :theta 0)
+(c::upload-disk-image :radius 1.4 :rho 0 :theta 0)
 #+nil
 (c::with-tcp c::*tcp* (c::status))
 #+nil
@@ -61,7 +61,7 @@
    (handler-case
        (unless (eq #\D (elt (second (first (c::with-tcp c::*tcp* (c::status)))) 50))
 	 (c::with-tcp c::*tcp* (c::set-start-mma)))
-     (packet-error () 
+     (c::packet-error () 
        (sleep 1)
        (go again))))
 #+nil
@@ -760,7 +760,7 @@
 
 #+nil
 (libusb0::forthdd-talk libusb0::*forthdd* #x23 
-		       (list 128))
+		       (list 126))
 
 (defun demo-mma ()
   (libusb0::forthdd-talk libusb0::*forthdd* #x23 
@@ -806,7 +806,7 @@
 (zeiss-mcu-write-position-y *zeiss-connection* (+ 174 300 300))
 
 (defun scan-exposures-multiline ()
-  (let ((y 0))
+  (let ((y -860))
    (zeiss-mcu-write-position-y *zeiss-connection* y)
    (scan-exposures 0 5)
    (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
@@ -818,7 +818,18 @@
    (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
    (scan-exposures 4 50)
    (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
-   (scan-exposures 5 100)))
+   (scan-exposures 5 100)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 6 100)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 7 200)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 8 200)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 9 50)
+   (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
+   (scan-exposures 10 50)
+   ))
 
 #+nil
 (time
@@ -837,11 +848,14 @@
 	 
 	 (c::upload-disk-image :radius rad :rho rho 
 			       :theta (* theta-deg pi (/ 180s0)))
-	 (format t "mma-status ~a~%" (c::with-tcp c::*tcp* (c::status)))
-	 (zeiss-mcu-write-position-x *zeiss-connection* (+ 0 (* 400 j)))
+	 (format t "mma-status ~a~%" (list (get-universal-time)
+					   (c::with-tcp c::*tcp* (c::status))))
+	 (zeiss-mcu-write-position-x *zeiss-connection* (+ -8200 (* 400 j)))
 	 (sleep 1)
 	 (dotimes (i n)
 	   (format t "illum ~a~%" (list i
+					(get-universal-time)
+					(zeiss-mcu-read-position *zeiss-connection*)
 					(tagbody 
 					 again
 					   (handler-case
@@ -857,7 +871,16 @@
 	  (libusb0::forthdd-talk libusb0::*forthdd* #x23 
 				 '(126)) ;; white
 	  (c::upload-disk-image :radius 1.5)
-	  (format t "mma-status ~a~%" (c::with-tcp c::*tcp* (c::status)))
+	  (tagbody 
+	   again
+	     (handler-case
+		 (unless (eq #\D (elt (second (first (c::with-tcp c::*tcp* (c::status)))) 50))
+		   (c::with-tcp c::*tcp* (c::set-start-mma)))
+	       (c::packet-error () 
+		 (sleep 1)
+		 (go again))))
+	  (format t "mma-status ~a~%" (list (get-universal-time)
+					    (c::with-tcp c::*tcp* (c::status))))
 	  (progn ;; capture one good image with one exposure
 	    (defparameter *clara-parameters* 
 	      (make-instance 'clara-camera
@@ -871,17 +894,27 @@
 				    :type "png" :version nil)
 		     *clara-image*))))
 
+
+
 (defun scan-exposures (scan n)
   (loop for (lcos rad rho theta-deg) in 
        '((126 1.5 .0 0) ;; white
 	 (125 1.5 .0 0) ;; black
 	 (128 2 0 0) ;; balken
+	 
 	 (128 .5 .7 0) 
+	 (129 .5 .7 0) 
+	 
 	 (128 .5 .7 60) 
 	 (128 .5 .7 120)
+	 
 	 (128 .5 .7 180)
+	 (129 .5 .7 180)
+	 
 	 (128 .5 .7 240)
 	 (128 .5 .7 300)
+	 (129 .5 .7 300)
+	 
 	 (125 1.5 .0 0) ;; black
 	 (126 1.5 .0 0) ;; white
 	 ) 
