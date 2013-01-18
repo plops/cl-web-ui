@@ -19,26 +19,42 @@
 		  :interface 0)))
 #+nil
 (libusb0::close-connection libusb0::*forthdd*)
-#xd5
+
 #+nil
 (c::mma-connect)
 #+nil
 (c::mma-init)
 #+nil
 (c::upload-disk-image :radius .3 :rho 0 :theta 0)
+
 #+nil
 (list 
- (loop for rad in '(.1) and j from 1 do
+ (let ((jj 0))
+  (loop for rad in '(.0 .4 .5 .6 .7 .8 .9) and j from (1+ jj) do
       
-      (sleep .2)
-      
-      (c::with-tcp c::*tcp* (c::write-matrix-data :picnum j))
-      (sleep .2)
-      (c::with-tcp c::*tcp*
-	(sb-ext:array-storage-vector 
-	 (g::make-ring-image rad 2. .0 .0 4095 0)))
-      (sleep .2)
-      (format t "~a~%" (c::with-tcp c::*tcp* (c::status)))))
+       (sleep .2)
+       (format t "MMA image ~a is near tirf at radius ~a~%" j rad)
+       (c::with-tcp c::*tcp* (c::write-matrix-data :picnum j))
+       (sleep .2)
+       (c::with-tcp c::*tcp*
+	 (sb-ext:array-storage-vector 
+	  (g::make-ring-image rad 2. .0 .0 4095 0)))
+       (sleep .2)
+       (format t "~a~%" (c::with-tcp c::*tcp* (c::status)))
+       (setf jj j))
+  (loop for angle in '(0 60 120 180 240 300) and j from (1+ jj) do
+       (sleep .2)
+       (c::with-tcp c::*tcp* (c::write-matrix-data :picnum j))
+       (sleep .2)
+       (format t "MMA image ~a is disk at angle ~a~%" j angle)
+
+       (c::with-tcp c::*tcp*
+	 (sb-ext:array-storage-vector 
+	  (g::make-disk-image .4 .5 (* pi (/ 180) angle) 4095 0)))
+       (sleep .2)
+       (format t "~a~%" (c::with-tcp c::*tcp* (c::status)))
+       (setf jj j))
+  (format t "number of images on mma: ~a~%" jj)))
 
 #+nil
 (loop for j from 1 below 101 do
@@ -50,20 +66,24 @@
 #+nil 
 (progn
        (c::with-tcp c::*tcp*
-	 (c::set-picture-sequence :picnum 1 :last-pic-p nil))
+	 (c::set-picture-sequence :picnum 8 :last-pic-p nil))
        (c::with-tcp c::*tcp*
-	 (c::set-picture-sequence :picnum 2 :last-pic-p nil))
+	 (c::set-picture-sequence :picnum 9 :last-pic-p nil))
        (c::with-tcp c::*tcp*
-	 (c::set-picture-sequence :picnum 3 :last-pic-p nil))
+	 (c::set-picture-sequence :picnum 10 :last-pic-p nil))
        (c::with-tcp c::*tcp*
-	 (c::set-picture-sequence :picnum 4 :last-pic-p t)))
+	 (c::set-picture-sequence :picnum 11 :last-pic-p nil))
+       (c::with-tcp c::*tcp*
+	 (c::set-picture-sequence :picnum 12 :last-pic-p nil))
+       (c::with-tcp c::*tcp*
+	 (c::set-picture-sequence :picnum 13 :last-pic-p t)))
 
 
 #+nil
 (c::with-tcp c::*tcp*
 	 (c::set-picture-sequence :picnum 1 :last-pic-p t))
 #+nil
-(let ((n 2))
+(let ((n 13))
   (loop for i from 1 below (- n 2) do
        (c::with-tcp c::*tcp*
 	 (c::set-picture-sequence :picnum i :last-pic-p nil))
@@ -317,9 +337,16 @@
 (zeiss-mcu-read-position *zeiss-connection*)
 
 #+nil
-(zeiss-mcu-write-position-x *zeiss-connection* -300)
+(dotimes (i 10)
+  (sleep .1)
+  (zeiss-mcu-write-position-x *zeiss-connection* -1905)
+  (sleep .1)
+  (zeiss-mcu-write-position-x *zeiss-connection* -1805))
+
 #+nil
-(zeiss-mcu-write-position-z *zeiss-connection* 27600)
+(zeiss-mcu-write-position-x *zeiss-connection* -1865)
+#+nil
+(zeiss-mcu-write-position-z *zeiss-connection* 5670)
 
 #+nil
 (libusb0::bulk-write libusb0::*forthdd* 
@@ -835,7 +862,7 @@
 
 #+nil
 (libusb0::forthdd-talk libusb0::*forthdd* #x23 
-			 '(126)) ; 126 white, 131 black F
+			 '(131)) ; 126 white, 131 black F
 #+nil
 (c::upload-disk-image :radius 2 :rho 0
 		      :theta 0)
@@ -867,7 +894,7 @@
 (zeiss-mcu-write-position-y *zeiss-connection* (+ 174 300 300))
 
 (defun scan-exposures-multiline ()
-  (let ((y -6000))
+  (let ((y 0))
    (zeiss-mcu-write-position-y *zeiss-connection* y)
    (scan-exposures 0)
    (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
@@ -889,8 +916,7 @@
    (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
    (scan-exposures 9)
    (incf y 400)(zeiss-mcu-write-position-y *zeiss-connection* y)(sleep 1)
-   (scan-exposures 10)
-   ))
+   (scan-exposures 10)))
 
 #+nil
 (time
@@ -946,17 +972,19 @@
 	 (sleep 1)
 	 (go again)))))
 
-(defun do-bleach (lcos rad rho theta-deg j scan n)
+(defun do-bleach (lcos mma j scan n)
   (progn ;; angular illumination
 	 
 	 (libusb0::forthdd-talk libusb0::*forthdd* #x23 
 				(list lcos))
 	 
-	 (progn (c::upload-disk-image :radius rad :rho rho 
-				 :theta (* theta-deg pi (/ 180s0)))
+	 (progn
+	   (c::with-tcp c::*tcp*
+	     (c::set-picture-sequence :picnum mma :last-pic-p t))
 	   (format t "mma-status ~a~%" (list (get-universal-time)
 					     (c::with-tcp c::*tcp* (c::status)))))
-	 (zeiss-mcu-write-position-x *zeiss-connection* (+ -600 (* 600 j)))
+	 
+	 (zeiss-mcu-write-position-x *zeiss-connection* (+ 2200 (* 600 j)))
 	 (sleep 1)
 	 (progn ;; capture one image before bleaching
 	    (defparameter *clara-parameters* 
@@ -988,9 +1016,10 @@
 	  (libusb0::forthdd-talk libusb0::*forthdd* #x23 
 				 '(126)) ;; white
 	  
-	  (progn (c::upload-disk-image :radius 1.5)
+	  (progn	    
+	    (c::with-tcp c::*tcp*
+	      (c::set-picture-sequence :picnum 1 :last-pic-p t))
 	    (ensure-mma-is-started)
-	    
 	    (format t "mma-status ~a~%" (list (get-universal-time)
 					      (c::with-tcp c::*tcp* (c::status)))))
 	  
@@ -1010,19 +1039,21 @@
 
 
 (defun scan-exposures (scan)
-  (loop for (lcos n rad rho theta-deg) in 
-       '(;(126 1.5 .0 0) ;; white
-	 ;(127 1.5 .0 0) ;; siemens
-	 ;	 (128 2 0 0)		;; vertical
-	 (129 200 .5 .7 0) ;; horizontal
-	 (130 200 .5 .7 60) ;; F
-	 (129 400 .5 .7 0)
-	 (130 400 .5 .7 0)
-	 (130 200 .5 .7 0)
-	 ) 
-     and j from 0 do
-       (format t "~a~%" (list scan j lcos  theta-deg))
-       (do-bleach lcos rad rho theta-deg j scan n)))
+  (loop for mma from 1 upto 13 do
+       #+nil (		    ;(126 1.5 .0 0) ;; white
+					;(127 1.5 .0 0) ;; siemens
+					;	 (128 2 0 0)		;; vertical
+	      (129 200)		;; horizontal
+	      (130 200)		;; F
+	      (130 200)		;; F
+	      (130 200)		;; F
+	      (129 400)
+	      (130 400)
+	      (130 200)) 
+       (format t "~a~%" (list scan mma))
+       (do-bleach 129 mma (* 3 mma) scan 50)
+       (do-bleach 129 mma (+ 1 (* 3 mma)) scan 100)
+       (do-bleach 130 mma (+ 2 (* 3 mma)) scan 100)))
 #+nil
 (time (scan-exposures 0))
 
